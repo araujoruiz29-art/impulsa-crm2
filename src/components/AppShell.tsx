@@ -505,14 +505,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </>
               )}
             </div>
-
-            <Link
-              href="/cotizaciones?new=1"
-              className="btn-brand hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl shadow-xs transition"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              Nueva Proforma
-            </Link>
           </div>
         </header>
 
