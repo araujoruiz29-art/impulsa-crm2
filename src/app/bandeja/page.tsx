@@ -16,6 +16,12 @@ import {
   Mic,
   Camera,
   Trash2,
+  SlidersHorizontal,
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  RotateCcw,
 } from "lucide-react";
 import { formatDateCR, normalizeCRPhone } from "@/lib/format";
 import { ShoeVisionModal } from "@/components/ShoeVisionModal";
@@ -58,10 +64,33 @@ interface Conv {
   messages: Msg[];
 }
 
+interface EmailAccTab {
+  id: string;
+  label: string;
+  email: string;
+  isDefault: boolean;
+  active: boolean;
+}
+
+interface InboxTabDef {
+  id: string;
+  label: string;
+  kind: "ALL" | "CHANNEL" | "EMAIL_ACCOUNT";
+  channel?: string;
+  accountEmail?: string;
+  isDefaultEmail?: boolean;
+}
+
+const TAB_PREFS_KEY = "impulsa_bandeja_tabs_v1";
+
 export default function BandejaPage() {
   const router = useRouter();
-  const [conversations, setConversations] = useState<Conv[]>([]);
+  const [allConversations, setAllConversations] = useState<Conv[]>([]);
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccTab[]>([]);
   const [channelFilter, setChannelFilter] = useState("ALL");
+  const [tabOrder, setTabOrder] = useState<string[]>([]);
+  const [hiddenTabs, setHiddenTabs] = useState<string[]>([]);
+  const [customizingTabs, setCustomizingTabs] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
@@ -94,19 +123,136 @@ export default function BandejaPage() {
   });
 
   const load = async () => {
-    const params = new URLSearchParams();
-    if (channelFilter !== "ALL") params.set("channel", channelFilter);
-    const res = await fetch(`/api/conversations?${params.toString()}`);
+    const res = await fetch("/api/conversations");
     const data = await res.json();
     const list: Conv[] = data.conversations || [];
-    setConversations(list);
-    if (!activeId && list.length > 0) setActiveId(list[0].id);
+    setAllConversations(list);
   };
 
   useEffect(() => {
     load();
+    fetch("/api/email-accounts")
+      .then((r) => r.json())
+      .then((d) => {
+        const accs: EmailAccTab[] = (d?.accounts || []).filter((a: EmailAccTab) => a.active !== false);
+        setEmailAccounts(accs);
+      })
+      .catch(() => {});
+    try {
+      const raw = localStorage.getItem(TAB_PREFS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed.order)) setTabOrder(parsed.order);
+        if (Array.isArray(parsed.hidden)) setHiddenTabs(parsed.hidden);
+      }
+    } catch {
+      // ignore storage errors
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelFilter]);
+  }, []);
+
+  const saveTabPrefs = (nextOrder: string[], nextHidden: string[]) => {
+    setTabOrder(nextOrder);
+    setHiddenTabs(nextHidden);
+    try {
+      localStorage.setItem(TAB_PREFS_KEY, JSON.stringify({ order: nextOrder, hidden: nextHidden }));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  // Build dynamic tabs: each configured email account gets its own separated inbox tab!
+  const defaultTabs: InboxTabDef[] = [
+    { id: "ALL", label: "Todos", kind: "ALL" },
+    { id: "WHATSAPP", label: "WhatsApp", kind: "CHANNEL", channel: "WHATSAPP" },
+    ...(emailAccounts.length > 0
+      ? emailAccounts.map((acc) => ({
+          id: `EMAIL::${acc.email.toLowerCase()}`,
+          label: acc.label ? `${acc.label} (${acc.email})` : acc.email,
+          kind: "EMAIL_ACCOUNT" as const,
+          channel: "EMAIL",
+          accountEmail: acc.email.toLowerCase(),
+          isDefaultEmail: acc.isDefault,
+        }))
+      : [{ id: "EMAIL", label: "Correo Corporativo", kind: "CHANNEL" as const, channel: "EMAIL" }]),
+    ...(emailAccounts.length > 1
+      ? [{ id: "EMAIL", label: "Todos los Correos", kind: "CHANNEL" as const, channel: "EMAIL" }]
+      : []),
+    { id: "FACEBOOK", label: "Messenger", kind: "CHANNEL", channel: "FACEBOOK" },
+    { id: "INSTAGRAM", label: "Instagram", kind: "CHANNEL", channel: "INSTAGRAM" },
+  ];
+
+  const orderedTabs: InboxTabDef[] = (() => {
+    const byId = new Map(defaultTabs.map((t) => [t.id, t]));
+    const result: InboxTabDef[] = [];
+    for (const id of tabOrder) {
+      const found = byId.get(id);
+      if (found) {
+        result.push(found);
+        byId.delete(id);
+      }
+    }
+    for (const remaining of byId.values()) {
+      result.push(remaining);
+    }
+    return result;
+  })();
+
+  const visibleTabs = orderedTabs.filter((t) => !hiddenTabs.includes(t.id));
+
+  const matchesTab = (c: Conv, tabId: string): boolean => {
+    if (tabId === "ALL") return true;
+    if (tabId.startsWith("EMAIL::")) {
+      const targetEmail = tabId.replace("EMAIL::", "").toLowerCase();
+      if (c.channel !== "EMAIL") return false;
+      const convEmail = (c.accountEmail || "").trim().toLowerCase();
+      if (convEmail) return convEmail === targetEmail;
+      // Legacy email threads without accountEmail belong to the default email account
+      const defAcc = emailAccounts.find((a) => a.isDefault) || emailAccounts[0];
+      return defAcc ? defAcc.email.toLowerCase() === targetEmail : false;
+    }
+    return c.channel === tabId;
+  };
+
+  const conversations = allConversations.filter((c) => matchesTab(c, channelFilter));
+
+  useEffect(() => {
+    if (conversations.length > 0 && !conversations.some((c) => c.id === activeId)) {
+      setActiveId(conversations[0].id);
+    } else if (conversations.length === 0) {
+      setActiveId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelFilter, allConversations]);
+
+  const moveTab = (tabId: string, dir: -1 | 1) => {
+    const ids = orderedTabs.map((t) => t.id);
+    const idx = ids.indexOf(tabId);
+    const nextIdx = idx + dir;
+    if (idx < 0 || nextIdx < 0 || nextIdx >= ids.length) return;
+    const copy = [...ids];
+    [copy[idx], copy[nextIdx]] = [copy[nextIdx], copy[idx]];
+    saveTabPrefs(copy, hiddenTabs);
+  };
+
+  const toggleTabHidden = (tabId: string) => {
+    const isHidden = hiddenTabs.includes(tabId);
+    const nextHidden = isHidden
+      ? hiddenTabs.filter((id) => id !== tabId)
+      : [...hiddenTabs, tabId];
+    // Prevent hiding every single tab
+    if (orderedTabs.every((t) => nextHidden.includes(t.id))) return;
+    saveTabPrefs(orderedTabs.map((t) => t.id), nextHidden);
+    if (!isHidden && channelFilter === tabId) {
+      const firstVisible = orderedTabs.find((t) => !nextHidden.includes(t.id));
+      if (firstVisible) setChannelFilter(firstVisible.id);
+    }
+  };
+
+  const resetTabPrefs = () => {
+    saveTabPrefs([], []);
+    setChannelFilter("ALL");
+  };
 
   useEffect(() => {
     fetch("/api/settings")
@@ -341,27 +487,135 @@ export default function BandejaPage() {
         </div>
       )}
 
-      {/* Channel filters */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          { id: "ALL", label: "Todos" },
-          { id: "WHATSAPP", label: "WhatsApp" },
-          { id: "EMAIL", label: "Correo Corporativo" },
-          { id: "FACEBOOK", label: "Messenger" },
-          { id: "INSTAGRAM", label: "Instagram" },
-        ].map((ch) => (
+      {/* Channel & Separated Email Inbox filters + Custom Order */}
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {visibleTabs.map((ch) => {
+            const tabConvs = allConversations.filter((c) => matchesTab(c, ch.id));
+            const unreadInTab = tabConvs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+            const isActive = channelFilter === ch.id;
+            return (
+              <button
+                key={ch.id}
+                onClick={() => setChannelFilter(ch.id)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                  isActive
+                    ? "bg-[#0070C0] text-white shadow-xs"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {ch.kind === "EMAIL_ACCOUNT" && (
+                  <Mail className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-white" : "text-[#0070C0]"}`} />
+                )}
+                <span>{ch.label}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : unreadInTab > 0
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {tabConvs.length}
+                </span>
+              </button>
+            );
+          })}
+
           <button
-            key={ch.id}
-            onClick={() => setChannelFilter(ch.id)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-              channelFilter === ch.id
-                ? "bg-[#0070C0] text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+            type="button"
+            onClick={() => setCustomizingTabs(!customizingTabs)}
+            className={`ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+              customizingTabs
+                ? "bg-indigo-50 border-indigo-300 text-[#22115d]"
+                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
+            title="Reordenar u ocultar pestañas de conexiones y bandejas de correo"
           >
-            {ch.label}
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Acomodar conexiones
           </button>
-        ))}
+        </div>
+
+        {customizingTabs && (
+          <div className="bg-white border border-indigo-200 rounded-2xl p-4 shadow-xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-bold text-slate-900">
+                  Acomodar orden y visibilidad de conexiones y bandejas de correo
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Usa las flechas para acomodarlas a tu gusto u oculta canales que aún no uses. Tus correos corporativos aparecen separados por cuenta.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={resetTabPrefs}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700"
+                >
+                  <RotateCcw className="w-3 h-3" /> Restablecer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomizingTabs(false)}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-[#22115d] text-white"
+                >
+                  Listo
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {orderedTabs.map((t, idx) => {
+                const isHidden = hiddenTabs.includes(t.id);
+                return (
+                  <div
+                    key={t.id}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs ${
+                      isHidden
+                        ? "bg-slate-50 border-slate-200 text-slate-400 opacity-75"
+                        : "bg-indigo-50/50 border-indigo-200 text-slate-800"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => moveTab(t.id, -1)}
+                      disabled={idx === 0}
+                      className="p-0.5 rounded hover:bg-white disabled:opacity-30"
+                      title="Mover a la izquierda"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="font-semibold max-w-[200px] truncate">{t.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => moveTab(t.id, 1)}
+                      disabled={idx === orderedTabs.length - 1}
+                      className="p-0.5 rounded hover:bg-white disabled:opacity-30"
+                      title="Mover a la derecha"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleTabHidden(t.id)}
+                      className={`p-1 rounded ml-0.5 ${
+                        isHidden
+                          ? "text-slate-400 hover:text-emerald-700 hover:bg-white"
+                          : "text-indigo-700 hover:text-rose-600 hover:bg-white"
+                      }`}
+                      title={isHidden ? "Mostrar pestaña" : "Ocultar pestaña"}
+                    >
+                      {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2-pane Inbox */}

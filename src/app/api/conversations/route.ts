@@ -9,11 +9,13 @@ export async function GET(req: NextRequest) {
   const workspaceId = await getActiveWorkspaceId();
   const { searchParams } = new URL(req.url);
   const channel = (searchParams.get("channel") || "").trim();
+  const accountEmail = (searchParams.get("accountEmail") || "").trim().toLowerCase();
 
   const conversations = await prisma.conversation.findMany({
     where: {
       workspaceId,
       ...(channel && channel !== "ALL" ? { channel } : {}),
+      ...(accountEmail ? { accountEmail } : {}),
     },
     include: {
       client: true,

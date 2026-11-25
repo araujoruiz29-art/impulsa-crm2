@@ -143,9 +143,10 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Herramienta de prueba para simular un mensaje entrante de WhatsApp o Lead de Meta Ads sin usar un teléfono real.",
       },
       {
-        control: "Filtros (Todos / WhatsApp / Correo Corporativo / Messenger / Instagram)",
+        control: "Pestañas separadas por canal y correo + «Acomodar conexiones»",
         location: "Debajo del encabezado",
-        purpose: "Filtra la lista de conversaciones por canal específico.",
+        purpose:
+          "Separa automáticamente cada buzón de correo corporativo en su propia bandeja (ej. ventas@ y uniformes@ por separado, nunca revueltos) junto a WhatsApp, Messenger e Instagram. Con el botón «Acomodar conexiones» puedes cambiar el orden (← / →) u ocultar canales que aún no uses.",
       },
       {
         control: "IA Activa / IA Pausada",
