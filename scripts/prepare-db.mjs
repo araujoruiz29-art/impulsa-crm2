@@ -1,43 +1,60 @@
 import fs from "node:fs";
 import path from "node:path";
 
-// Automatically detects SQLite (local) vs PostgreSQL (Vercel / Prisma Postgres / Neon / Supabase)
-// and binds prisma/schema.prisma to whichever env variable Vercel actually injected.
+// Bulletproof DB provider switcher for local SQLite vs Vercel PostgreSQL
 const schemaPath = path.join(process.cwd(), "prisma", "schema.prisma");
 
 const preferredDirectOrder = [
-  "DATABASE_URL",
-  "POSTGRES_URL",
   "POSTGRES_URL_NON_POOLING",
-  "POSTGRES_PRISMA_URL",
+  "POSTGRES_URL",
+  "DATABASE_URL",
   "STORAGE_POSTGRES_URL",
   "STORAGE_DATABASE_URL",
+  "POSTGRES_PRISMA_URL",
   "PRISMA_DATABASE_URL",
 ];
 
+function cleanVal(v) {
+  return (v || "").trim().replace(/^["']|["']$/g, "");
+}
+
 function findDbEnvVar() {
-  // 1. Prefer direct postgres:// or postgresql:// URLs (work cleanly with prisma db push without Accelerate)
+  const dbRelated = Object.entries(process.env)
+    .filter(([k]) => /DATABASE|POSTGRES|PRISMA|STORAGE/i.test(k) && /URL$/i.test(k))
+    .map(([k, v]) => {
+      const c = cleanVal(v);
+      const proto = c.includes("://") ? c.split("://")[0] + "://" : "(other)";
+      return `${k}=${proto}`;
+    });
+  console.log("[prepare-db] Detected DB env vars:", dbRelated.join(", ") || "none");
+
+  // 1. Prefer direct postgres:// or postgresql:// URLs (required by prisma db push)
   for (const name of preferredDirectOrder) {
-    const val = process.env[name];
-    if (val && (val.startsWith("postgres://") || val.startsWith("postgresql://"))) {
-      return { name, val, isPostgres: true };
+    const val = cleanVal(process.env[name]);
+    if (val.startsWith("postgres://") || val.startsWith("postgresql://")) {
+      return { name, isPostgres: true };
     }
   }
-  // 2. Scan all env vars for any postgres:// or postgresql:// URL
-  for (const [name, val] of Object.entries(process.env)) {
-    if (val && (val.startsWith("postgres://") || val.startsWith("postgresql://"))) {
-      return { name, val, isPostgres: true };
+  for (const [name, raw] of Object.entries(process.env)) {
+    const val = cleanVal(raw);
+    if (val.startsWith("postgres://") || val.startsWith("postgresql://")) {
+      return { name, isPostgres: true };
     }
   }
-  // 3. Fallback to prisma+postgres:// if only that exists
+
+  // 2. Fallback to prisma+postgres:// (or any Vercel environment)
   for (const name of preferredDirectOrder) {
-    const val = process.env[name];
-    if (val && val.startsWith("prisma+postgres://")) {
-      return { name, val, isPostgres: true };
+    const val = cleanVal(process.env[name]);
+    if (val.startsWith("prisma+postgres://")) {
+      return { name, isPostgres: true };
     }
   }
-  // 4. Local SQLite default
-  return { name: "DATABASE_URL", val: process.env.DATABASE_URL || "file:./dev.db", isPostgres: false };
+
+  if (process.env.VERCEL === "1" || process.env.VERCEL === "true") {
+    return { name: "DATABASE_URL", isPostgres: true };
+  }
+
+  return { name: "DATABASE_URL", isPostgres: false };
 }
 
 const found = findDbEnvVar();
@@ -47,10 +64,10 @@ if (found.isPostgres) {
   schema = schema.replace(/provider\s*=\s*"(?:sqlite|postgresql)"/, 'provider = "postgresql"');
   schema = schema.replace(/url\s*=\s*env\("[^"]+"\)/, `url      = env("${found.name}")`);
   fs.writeFileSync(schemaPath, schema, "utf8");
-  console.log(`[prepare-db] Configured PostgreSQL using env("${found.name}")`);
+  console.log(`[prepare-db] Switched Prisma datasource -> postgresql using env("${found.name}")`);
 } else {
   schema = schema.replace(/provider\s*=\s*"(?:sqlite|postgresql)"/, 'provider = "sqlite"');
   schema = schema.replace(/url\s*=\s*env\("[^"]+"\)/, 'url      = env("DATABASE_URL")');
   fs.writeFileSync(schemaPath, schema, "utf8");
-  console.log('[prepare-db] Configured SQLite using env("DATABASE_URL")');
+  console.log('[prepare-db] Switched Prisma datasource -> sqlite using env("DATABASE_URL")');
 }
