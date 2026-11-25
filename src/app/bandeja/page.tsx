@@ -15,6 +15,7 @@ import {
   X,
   Mic,
   Camera,
+  Trash2,
 } from "lucide-react";
 import { formatDateCR, normalizeCRPhone } from "@/lib/format";
 import { ShoeVisionModal } from "@/components/ShoeVisionModal";
@@ -440,6 +441,22 @@ export default function BandejaPage() {
                       WhatsApp <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
+                  <button
+                    onClick={async () => {
+                      if (!confirm("¿Eliminar esta conversación y sus mensajes?")) return;
+                      await fetch("/api/cleanup", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ conversationId: activeConv.id }),
+                      });
+                      setActiveId(null);
+                      load();
+                    }}
+                    title="Eliminar conversación"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-rose-200 text-rose-600 hover:bg-rose-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 

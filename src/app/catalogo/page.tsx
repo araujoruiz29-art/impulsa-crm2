@@ -116,6 +116,22 @@ export default function CatalogoPage() {
           >
             <Camera className="w-4 h-4" /> Buscar Zapato por Foto (Stock Web)
           </button>
+          {products.length > 0 && (
+            <button
+              onClick={async () => {
+                if (!confirm(`¿Vaciar los ${products.length} artículos del catálogo?`)) return;
+                await fetch("/api/cleanup", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ clearProducts: true }),
+                });
+                load();
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl shadow-xs"
+            >
+              <Trash2 className="w-4 h-4" /> Vaciar Catálogo
+            </button>
+          )}
           <button
             onClick={openNew}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#0070C0] hover:bg-[#005a9e] text-white rounded-xl shadow-sm"

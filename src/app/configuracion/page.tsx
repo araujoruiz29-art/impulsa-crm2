@@ -943,6 +943,96 @@ export default function ConfiguracionPage() {
                 </label>
               </div>
             </div>
+
+            <div className="p-5 rounded-2xl bg-rose-50/70 border border-rose-200 space-y-3">
+              <h3 className="font-bold text-rose-950 flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-rose-600" /> 3. Limpieza de Datos de Prueba (Dejar solo Correos)
+              </h3>
+              <p className="text-xs text-rose-900/80">
+                Elimina chats de prueba (WhatsApp / Meta / simulaciones) y los artículos demo del catálogo.{" "}
+                <strong>Tus mensajes de correo corporativo, proformas, clientes, horarios y conexiones NO se borran.</strong>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={testing}
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        "¿Eliminar TODOS los chats de prueba (dejando solo correos) y vaciar los artículos del catálogo?\n\nTus correos corporativos, proformas, clientes, horarios y llaves seguirán intactos."
+                      )
+                    ) {
+                      return;
+                    }
+                    setTesting(true);
+                    setStatusMsg("");
+                    try {
+                      const res = await fetch("/api/cleanup", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          clearNonEmailConversations: true,
+                          clearProducts: true,
+                        }),
+                      });
+                      const data = await res.json();
+                      setStatusMsg(res.ok ? `✅ ${data.message}` : `❌ ${data.error}`);
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl"
+                >
+                  <Trash2 className="w-4 h-4" /> Limpiar chats de prueba + catálogo (dejar solo correos)
+                </button>
+                <button
+                  type="button"
+                  disabled={testing}
+                  onClick={async () => {
+                    if (!confirm("¿Eliminar solo los chats que NO son de correo (WhatsApp/pruebas)?")) return;
+                    setTesting(true);
+                    setStatusMsg("");
+                    try {
+                      const res = await fetch("/api/cleanup", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ clearNonEmailConversations: true }),
+                      });
+                      const data = await res.json();
+                      setStatusMsg(res.ok ? `✅ ${data.message}` : `❌ ${data.error}`);
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-rose-200 text-rose-800 text-xs font-semibold rounded-xl hover:bg-rose-100/60"
+                >
+                  Solo chats de prueba
+                </button>
+                <button
+                  type="button"
+                  disabled={testing}
+                  onClick={async () => {
+                    if (!confirm("¿Vaciar todos los artículos del Catálogo e Inventario?")) return;
+                    setTesting(true);
+                    setStatusMsg("");
+                    try {
+                      const res = await fetch("/api/cleanup", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ clearProducts: true }),
+                      });
+                      const data = await res.json();
+                      setStatusMsg(res.ok ? `✅ ${data.message}` : `❌ ${data.error}`);
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-rose-200 text-rose-800 text-xs font-semibold rounded-xl hover:bg-rose-100/60"
+                >
+                  Solo vaciar catálogo
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
