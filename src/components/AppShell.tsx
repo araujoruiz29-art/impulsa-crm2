@@ -117,6 +117,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         fetch("/api/workspaces"),
         fetch("/api/dashboard"),
       ]);
+      if (wsRes.status === 401 || dashRes.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       const [wsData, dashData] = await Promise.all([wsRes.json(), dashRes.json()]);
       if (wsData?.workspaces) {
         setWorkspaces(wsData.workspaces);

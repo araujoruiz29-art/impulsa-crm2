@@ -125,10 +125,18 @@ export default function BandejaPage() {
   });
 
   const load = async () => {
-    const res = await fetch("/api/conversations");
-    const data = await res.json();
-    const list: Conv[] = data.conversations || [];
-    setAllConversations(list);
+    try {
+      const res = await fetch("/api/conversations");
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      const data = await res.json();
+      const list: Conv[] = Array.isArray(data.conversations) ? data.conversations : [];
+      setAllConversations(list);
+    } catch {
+      // ignore transient network error
+    }
   };
 
   useEffect(() => {
@@ -168,14 +176,19 @@ export default function BandejaPage() {
     { id: "ALL", label: "Todos", kind: "ALL" },
     { id: "WHATSAPP", label: "WhatsApp", kind: "CHANNEL", channel: "WHATSAPP" },
     ...(emailAccounts.length > 0
-      ? emailAccounts.map((acc) => ({
-          id: `EMAIL::${acc.email.toLowerCase()}`,
-          label: acc.label ? `${acc.label} (${acc.email})` : acc.email,
-          kind: "EMAIL_ACCOUNT" as const,
-          channel: "EMAIL",
-          accountEmail: acc.email.toLowerCase(),
-          isDefaultEmail: acc.isDefault,
-        }))
+      ? emailAccounts
+          .filter((acc) => Boolean(acc?.email))
+          .map((acc) => {
+            const cleanEmail = String(acc.email || "").trim().toLowerCase();
+            return {
+              id: `EMAIL::${cleanEmail}`,
+              label: acc.label ? `${acc.label} (${cleanEmail})` : cleanEmail,
+              kind: "EMAIL_ACCOUNT" as const,
+              channel: "EMAIL",
+              accountEmail: cleanEmail,
+              isDefaultEmail: acc.isDefault,
+            };
+          })
       : [{ id: "EMAIL", label: "Correo Corporativo", kind: "CHANNEL" as const, channel: "EMAIL" }]),
     ...(emailAccounts.length > 1
       ? [{ id: "EMAIL", label: "Todos los Correos", kind: "CHANNEL" as const, channel: "EMAIL" }]

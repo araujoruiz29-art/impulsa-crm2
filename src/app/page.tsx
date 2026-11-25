@@ -95,8 +95,14 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/dashboard");
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       const json = await res.json();
-      setData(json);
+      if (res.ok && json && !json.error) {
+        setData(json);
+      }
     } finally {
       setLoading(false);
     }
@@ -331,7 +337,7 @@ export default function DashboardPage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
           {CLIENT_STAGES.map((st) => {
-            const info = data?.byStage[st.id] || { count: 0, value: 0 };
+            const info = data?.byStage?.[st.id] || { count: 0, value: 0 };
             return (
               <div key={st.id} className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
                 <div className="flex items-center gap-1.5">
