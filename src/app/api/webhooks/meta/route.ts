@@ -212,7 +212,16 @@ export async function POST(req: NextRequest) {
 
         // B. Meta Lead Ads (Facebook / Instagram Forms)
         if (change.field === "leadgen" && value.leadgen_id) {
-          const leadDetails = await fetchMetaLeadDetails(value.leadgen_id, cfg.metaAccessToken);
+          let leadWsId = wsId;
+          if (entry.id) {
+            const pageMatch = await prisma.integrationSettings.findFirst({
+              where: { metaPageId: String(entry.id) },
+              select: { id: true },
+            });
+            if (pageMatch) leadWsId = pageMatch.id;
+          }
+          const leadCfg = leadWsId === wsId ? wsCfg : await getIntegrationSettings(leadWsId);
+          const leadDetails = await fetchMetaLeadDetails(value.leadgen_id, leadCfg.metaAccessToken);
           const fields: Record<string, string> = {};
           if (leadDetails?.field_data) {
             for (const f of leadDetails.field_data) {
@@ -226,6 +235,7 @@ export async function POST(req: NextRequest) {
 
           const client = await prisma.client.create({
             data: {
+              workspaceId: leadWsId,
               company: companyName,
               contactName: name,
               phone,
@@ -241,6 +251,7 @@ export async function POST(req: NextRequest) {
 
           const conv = await prisma.conversation.create({
             data: {
+              workspaceId: leadWsId,
               channel: "WHATSAPP",
               externalId: phone || String(value.leadgen_id),
               subject: `Lead Meta Ads - ${companyName}`,
@@ -262,6 +273,7 @@ export async function POST(req: NextRequest) {
           });
 
           await runTriggerAutomations("NEW_META_LEAD", {
+            workspaceId: leadWsId,
             clientId: client.id,
             conversationId: conv.id,
             channel: "WHATSAPP",
@@ -269,18 +281,34 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 2. Facebook Messenger / Instagram DM messaging array
+      // 2. Facebook Messenger / Instagram DM messaging array (Multi-tenant by Page ID / IG ID)
       const messaging = Array.isArray(entry.messaging) ? entry.messaging : [];
+      let msgWsId = targetWorkspaceId;
+      if (messaging.length > 0 && entry.id) {
+        const socialMatch = await prisma.integrationSettings.findFirst({
+          where: {
+            OR: [
+              { metaPageId: String(entry.id) },
+              { metaIgAccountId: String(entry.id) },
+            ],
+          },
+          select: { id: true },
+        });
+        if (socialMatch) msgWsId = socialMatch.id;
+      }
       for (const ev of messaging) {
         if (!ev.message?.text) continue;
         const senderId = String(ev.sender?.id || "");
         const channel = payload.object === "instagram" ? "INSTAGRAM" : "FACEBOOK";
         const bodyText = String(ev.message.text);
 
-        let client = await prisma.client.findFirst({ where: { code: senderId } });
+        let client = await prisma.client.findFirst({
+          where: { workspaceId: msgWsId, code: senderId },
+        });
         if (!client) {
           client = await prisma.client.create({
             data: {
+              workspaceId: msgWsId,
               code: senderId,
               company: `${channel} ${senderId.slice(-4)}`,
               contactName: `Usuario ${channel}`,
@@ -291,7 +319,7 @@ export async function POST(req: NextRequest) {
         }
 
         let conv = await prisma.conversation.findFirst({
-          where: { channel, externalId: senderId },
+          where: { workspaceId: msgWsId, channel, externalId: senderId },
         });
         if (!conv) {
           conv = await prisma.conversation.create({
