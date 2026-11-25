@@ -99,6 +99,8 @@ export default function BandejaPage() {
   const [statusBanner, setStatusBanner] = useState("");
   const [aiGlobalPaused, setAiGlobalPaused] = useState(false);
   const [togglingGlobalAi, setTogglingGlobalAi] = useState(false);
+  const [metaLiveConnected, setMetaLiveConnected] = useState(true);
+  const [isCaminanteWorkspace, setIsCaminanteWorkspace] = useState(true);
 
   // Simulator modal for testing WhatsApp / Meta Lead Ads locally
   const [simOpen, setSimOpen] = useState(false);
@@ -260,6 +262,14 @@ export default function BandejaPage() {
       .then((d) => {
         if (d?.integrations) {
           setAiGlobalPaused(Boolean(d.integrations.aiGlobalPaused));
+          setMetaLiveConnected(
+            Boolean(d.integrations.metaAccessToken && d.integrations.metaPhoneNumberId)
+          );
+        } else {
+          setMetaLiveConnected(false);
+        }
+        if (d?.company) {
+          setIsCaminanteWorkspace(d.company.id === "default");
         }
       })
       .catch(() => {});
@@ -456,27 +466,33 @@ export default function BandejaPage() {
             <RefreshCw className={`w-4 h-4 text-[#0070C0] ${syncingEmail ? "animate-spin" : ""}`} />
             {syncingEmail ? "Sincronizando..." : "Sincronizar Correo IMAP"}
           </button>
-          <button
-            onClick={() => setVisionOpen(true)}
-            className="btn-brand inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl shadow-sm"
-          >
-            <Camera className="w-4 h-4" />
-            Foto Zapato → Stock
-          </button>
-          <button
-            onClick={() => setAudioOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-sm"
-          >
-            <Mic className="w-4 h-4" />
-            Probar Audio WhatsApp
-          </button>
-          <button
-            onClick={() => setSimOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm"
-          >
-            <MessageSquarePlus className="w-4 h-4" />
-            Simular WhatsApp / Lead Meta
-          </button>
+          {isCaminanteWorkspace && (
+            <button
+              onClick={() => setVisionOpen(true)}
+              className="btn-brand inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl shadow-sm"
+            >
+              <Camera className="w-4 h-4" />
+              Foto Zapato → Stock
+            </button>
+          )}
+          {!metaLiveConnected && (
+            <>
+              <button
+                onClick={() => setAudioOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-sm"
+              >
+                <Mic className="w-4 h-4" />
+                Probar Audio WhatsApp
+              </button>
+              <button
+                onClick={() => setSimOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm"
+              >
+                <MessageSquarePlus className="w-4 h-4" />
+                Simular WhatsApp / Lead Meta
+              </button>
+            </>
+          )}
         </div>
       </div>
 
