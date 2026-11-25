@@ -535,30 +535,32 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Quick shortcut bar */}
-      <div className="bg-gradient-to-r from-[#0070C0] to-[#005494] rounded-2xl p-5 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h3 className="font-bold text-base">¿Listo para conectar Meta Cloud API y tu Correo Corporativo?</h3>
-          <p className="text-xs text-sky-100 mt-1">
-            Ingresa tus credenciales SMTP/IMAP (ventas@elcaminantecr.com) y tus llaves de Meta Business para atender WhatsApp, Lead Ads y enviar Proformas PDF en automático.
-          </p>
+      {/* Quick shortcut bar (only shown until WhatsApp and Corporate Email are connected) */}
+      {(!data?.connections?.whatsappConnected || !data?.connections?.emailConnected) && (
+        <div className="bg-gradient-to-r from-[#0070C0] to-[#005494] rounded-2xl p-5 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <h3 className="font-bold text-base">¿Listo para conectar Meta Cloud API y tu Correo Corporativo?</h3>
+            <p className="text-xs text-sky-100 mt-1">
+              Ingresa tus credenciales de correo corporativo (SMTP/IMAP) y tus llaves de Meta Business para atender WhatsApp, Lead Ads y enviar Proformas PDF en automático.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Link
+              href="/clientes"
+              className="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-xs font-semibold px-3.5 py-2 rounded-xl"
+            >
+              <Users className="w-4 h-4" />
+              Base de Clientes
+            </Link>
+            <Link
+              href="/configuracion"
+              className="inline-flex items-center gap-1.5 bg-white text-[#0070C0] hover:bg-sky-50 text-xs font-bold px-3.5 py-2 rounded-xl"
+            >
+              Configurar Integraciones
+            </Link>
+          </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Link
-            href="/clientes"
-            className="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-xs font-semibold px-3.5 py-2 rounded-xl"
-          >
-            <Users className="w-4 h-4" />
-            Base de Clientes
-          </Link>
-          <Link
-            href="/configuracion"
-            className="inline-flex items-center gap-1.5 bg-white text-[#0070C0] hover:bg-sky-50 text-xs font-bold px-3.5 py-2 rounded-xl"
-          >
-            Configurar Integraciones
-          </Link>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
