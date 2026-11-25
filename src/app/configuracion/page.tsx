@@ -892,7 +892,7 @@ export default function ConfiguracionPage() {
             <div className="pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600">
-                  Plantilla WhatsApp cuando SÍ reconoce foto de zapato
+                  Plantilla WhatsApp cuando SÍ reconoce foto de producto
                 </label>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Variables: <code>{"{{modelo}}"}</code>, <code>{"{{sku}}"}</code>, <code>{"{{precio}}"}</code>, <code>{"{{tallas}}"}</code>, <code>{"{{enlace}}"}</code>, <code>{"{{alternativa}}"}</code>

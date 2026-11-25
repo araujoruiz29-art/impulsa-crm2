@@ -37,6 +37,7 @@ export interface VisionAnalysis {
   brand: string;
   modelGuess: string;
   shoeType: string;
+  category?: "CALZADO" | "ROPA" | "ACCESORIO" | "GENERAL";
   colors: string[];
   searchQueries: string[];
   visualSummary: string;
@@ -204,19 +205,24 @@ export async function analyzeShoePhoto(
   const base64 = imageBytes.toString("base64");
   const cleanMime = mimeType.split(";")[0] || "image/jpeg";
 
-  const prompt = `Analiza esta fotografía de un zapato/tenis/bota enviada por un cliente a la tienda El Caminante en Costa Rica (vende tenis deportivas y casuales Joma, Skechers, Nike, Adidas, Puma, Asics, New Balance, Under Armour, Reebok, Umbro, Mizuno, Vans, Converse, botas de seguridad, botas PVC Kayman/Dinosaurio, tacos fútbol, tenis futsal IN/TF).
+  const prompt = `Analiza esta fotografía de un PRODUCTO enviada por un cliente a la tienda El Caminante en Costa Rica (vende TODO tipo de artículos deportivos y laborales: tenis/zapatos/botas/tacos/sandalias, uniformes, camisas/camisetas, pantalonetas/shorts, licras, jackets/sudaderas, gorras, bolsos/mochilas, balones, guantes, espinilleras, medias y accesorios de marcas como Joma, Skechers, Nike, Adidas, Puma, Asics, New Balance, Under Armour, Reebok, Umbro, Mizuno, Vans, Converse, Kayman, etc.).
 ${hintText ? `Texto o pista adicional del cliente: "${hintText}"` : ""}
 
 Devuelve ÚNICAMENTE un JSON válido (sin markdown ni texto extra):
 {
-  "brand": "SOLO la marca principal en 1-2 palabras (ej. New Balance, Skechers, Joma, Nike, Adidas, Puma, Asics, Kayman)",
-  "modelGuess": "Código numérico o familia exacta del modelo sin colores (ej. 574, 530, 9060, 327, 480, 740, Glide-Step, Bobs Squad, Go Walk, Top Flex, Air Max, Samba, Gazelle, Predator)",
-  "shoeType": "Tipo breve (ej. Casual, Running, Futsal IN, Turf TF, Tacos FG, Seguridad, Bota PVC)",
+  "category": "CALZADO | ROPA | ACCESORIO | GENERAL",
+  "brand": "SOLO la marca principal en 1-2 palabras (ej. New Balance, Skechers, Joma, Nike, Adidas, Puma, Asics, Kayman, o vacío si no se distingue)",
+  "modelGuess": "Código numérico, línea o nombre corto del artículo sin colores (ej. 574, Glide-Step, Top Flex, Gorra Heritage, Mochila Brasilia, Balón Futsal, Camiseta Championship, Guante Portero)",
+  "shoeType": "Tipo breve del producto (ej. Tenis Running, Calzado Seguridad, Gorra, Mochila, Camisa Deportiva, Pantaloneta, Balón, Medias, Jacket, Guantes)",
   "colors": ["color principal", "color secundario"],
-  "searchQueries": ["Marca + Código/Modelo exacto sin color (ej. New Balance 574)", "Marca + segundo código parecido (ej. New Balance 327)", "Solo la marca (ej. New Balance)"],
-  "visualSummary": "Descripción breve en 1 frase del zapato que se ve en la foto"
+  "searchQueries": ["Tipo/Marca + Modelo exacto sin color (ej. Mochila Nike, Gorra Adidas, New Balance 574, Balon Golty)", "Segunda búsqueda corta relevante (ej. Bolso Nike, Camisa Joma)", "Solo marca o tipo de artículo (ej. Gorra, Mochila, New Balance)"],
+  "visualSummary": "Descripción breve en 1 frase del producto que se ve en la foto"
 }
-IMPORTANTE: Para New Balance, Adidas, Nike o Asics intenta identificar el número de modelo exacto (ej. 574, 530, 9060, 327, 520, 411, 480, 740). En searchQueries NO pongas colores ni 'Slip-Ins' ni 'para mujer'.`;
+IMPORTANTE:
+- Si es un zapato/tenis/bota/taco/sandalia pon category: "CALZADO".
+- Si es camisa, camiseta, pantaloneta, short, licra, jacket, sudadera, uniforme o medias pon category: "ROPA".
+- Si es gorra, bolso, mochila, balón, guante, espinillera, botella o accesorio pon category: "ACCESORIO".
+- En searchQueries NO pongas colores ni 'para mujer/hombre'.`;
 
   if (cfg.aiApiKey && cfg.aiProvider === "gemini") {
     try {
@@ -246,10 +252,17 @@ IMPORTANTE: Para New Balance, Adidas, Nike o Asics intenta identificar el númer
         if (brand && !queries.includes(brand)) queries.push(brand);
         if (hintText.trim() && !queries.includes(hintText.trim())) queries.unshift(hintText.trim());
 
+        const rawCat = String(p.category || "GENERAL").toUpperCase();
+        const category: VisionAnalysis["category"] =
+          rawCat === "CALZADO" || rawCat === "ROPA" || rawCat === "ACCESORIO"
+            ? rawCat
+            : "GENERAL";
+
         return {
           brand,
           modelGuess,
-          shoeType: String(p.shoeType || "Calzado"),
+          shoeType: String(p.shoeType || "Producto"),
+          category,
           colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
           searchQueries: queries.filter(Boolean),
           visualSummary: String(p.visualSummary || "Foto analizada con Gemini Vision."),
@@ -445,17 +458,17 @@ La PRIMERA imagen es la foto enviada por el cliente (puede estar tomada con celu
 Las siguientes ${batch.length} imágenes numeradas (Opción #1 a Opción #${batch.length}) son fotos oficiales de catálogo de nuestra tienda El Caminante.
 
 Compara cuidadosamente:
-1) Forma y dibujo de la suela (ej. perforaciones geométricas Glide-Step, suela retro New Balance, tacos TF, suela lisa IN).
-2) Color principal de la malla/gamuza y color del logo/suela/talón.
-3) Diseño lateral del logo y costuras.
+1) Tipo de producto y forma general (silueta, suela si es calzado, corte/cuello si es ropa, forma/correas/visera si es bolso, gorra o accesorio).
+2) Color principal, detalles secundarios, estampados o paneles.
+3) Ubicación y diseño del logotipo, marca y costuras.
 
 Reglas de calificación:
-- Si una opción coincide en modelo Y color (o casi idéntico), pon confidence entre 80 y 99.
+- Si una opción coincide en modelo/artículo Y color (o casi idéntico), pon confidence entre 80 y 99.
 - Si coincide en la misma línea/silueta pero varía ligeramente el tono/versión, pon confidence entre 55 y 79 y sugiere runnerUpIndex con la segunda mejor opción.
-- Solo pon bestIndex: 0 si NINGUNA opción se parece al zapato del cliente.
+- Solo pon bestIndex: 0 si NINGUNA opción se parece al producto del cliente.
 
 Devuelve ÚNICAMENTE JSON válido sin texto extra:
-{"bestIndex": 1, "runnerUpIndex": 2, "confidence": 88, "reason": "Coincide silueta, logo y color"}`,
+{"bestIndex": 1, "runnerUpIndex": 2, "confidence": 88, "reason": "Coincide diseño, logo y color"}`,
         },
         {
           inlineData: {
@@ -732,6 +745,20 @@ export async function fetchLiveShoeDetailsAndSizes(
         if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
         return a.size.localeCompare(b.size);
       });
+    } else {
+      // Single-variant products without size dropdown (backpacks, caps, balls, accessories)
+      const st = await fetchBranchStock(candidate.idProduct, "0");
+      const total = st.quesada + st.fortuna + st.online;
+      if (total > 0) {
+        sizes.push({
+          size: "Única",
+          attributeId: "0",
+          quesada: st.quesada,
+          fortuna: st.fortuna,
+          online: st.online,
+          totalAvailable: total,
+        });
+      }
     }
   } catch (err) {
     console.error("Error fetching live shoe details:", err);
@@ -781,15 +808,29 @@ export async function identifyShoeAndFetchLiveStock(params: {
     };
   }
 
-  // Gather up to 24 footwear candidates across all vision search queries
+  // Gather up to 24 store candidates across all vision search queries (category-aware!)
+  const hasPhoto = Boolean(params.imageBytes && params.imageBytes.length > 0 && !params.candidateUrl);
+  const footwearOnly = hasPhoto && vision.category === "CALZADO";
+
   const candidateMap = new Map<string, StoreCandidate>();
   for (const q of vision.searchQueries.slice(0, 4)) {
     if (!q.trim()) continue;
-    const found = await searchCaminanteStore(q.trim(), storeBase, 24);
+    const found = await searchCaminanteStore(q.trim(), storeBase, 24, footwearOnly);
     for (const c of found) {
       if (!candidateMap.has(c.idProduct)) candidateMap.set(c.idProduct, c);
     }
     if (candidateMap.size >= 24) break;
+  }
+  // Fallback without footwear filter if strict footwear search returned empty
+  if (candidateMap.size === 0 && footwearOnly) {
+    for (const q of vision.searchQueries.slice(0, 3)) {
+      if (!q.trim()) continue;
+      const found = await searchCaminanteStore(q.trim(), storeBase, 24, false);
+      for (const c of found) {
+        if (!candidateMap.has(c.idProduct)) candidateMap.set(c.idProduct, c);
+      }
+      if (candidateMap.size >= 24) break;
+    }
   }
 
   const localMatches = await prisma.product.findMany({

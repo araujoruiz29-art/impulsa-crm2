@@ -114,7 +114,7 @@ export default function CatalogoPage() {
             onClick={() => setVisionOpen(true)}
             className="btn-brand inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl shadow-sm"
           >
-            <Camera className="w-4 h-4" /> Buscar Zapato por Foto (Stock Web)
+            <Camera className="w-4 h-4" /> Buscar por Foto (Stock Web)
           </button>
           {products.length > 0 && (
             <button

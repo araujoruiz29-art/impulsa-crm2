@@ -100,9 +100,9 @@ export async function POST(req: NextRequest) {
                   hintText: msg.image?.caption || "",
                 });
                 autoVisionReply = stockRes.whatsappReply;
-                rawTextForAi = `Foto de calzado enviada por cliente. ${
+                rawTextForAi = `Foto de producto enviada por cliente. ${
                   stockRes.bestMatch
-                    ? `Modelo identificado: ${stockRes.bestMatch.name} (${stockRes.bestMatch.sku}) - Precio ${stockRes.bestMatch.priceText}`
+                    ? `Producto identificado: ${stockRes.bestMatch.name} (${stockRes.bestMatch.sku}) - Precio ${stockRes.bestMatch.priceText}`
                     : stockRes.vision.visualSummary
                 }`;
                 bodyText = `📷 [Foto analizada por IA Visual]: ${

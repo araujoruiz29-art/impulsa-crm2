@@ -141,10 +141,10 @@ export function ShoeVisionModal({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                Reconocimiento Visual de Calzado + Stock en Vivo
+                Búsqueda Visual de Productos + Stock en Vivo
               </h2>
               <p className="text-xs text-slate-500">
-                Sube solo la foto de un zapato → IA identifica el modelo y consulta tallas y precio en <strong>elcaminantecr.com/tienda</strong>
+                Sube la foto de cualquier producto (tenis, ropa, gorras, bolsos, balones, botas...) → IA lo identifica y consulta precio y stock por sucursal en <strong>elcaminantecr.com/tienda</strong>
               </p>
             </div>
           </div>
@@ -185,18 +185,18 @@ export function ShoeVisionModal({
             <div className="md:col-span-7 space-y-3">
               <div>
                 <label className="text-xs font-semibold text-slate-600">
-                  Pista opcional o búsqueda directa por modelo/marca (ej. Joma Top Flex, Nike, Bota)
+                  Pista opcional o búsqueda directa (ej. Joma Top Flex, Gorra Nike, Mochila, Balón, Bota)
                 </label>
                 <input
                   value={hint}
                   onChange={(e) => setHint(e.target.value)}
-                  placeholder="Déjalo vacío si solo tienes la foto, o escribe un modelo para probar stock en vivo..."
+                  placeholder="Déjalo vacío si solo tienes la foto, o escribe un producto para consultar stock en vivo..."
                   className="w-full mt-1 px-3 py-2.5 text-sm border border-slate-200 rounded-xl"
                 />
               </div>
 
               <div className="flex flex-wrap gap-1.5">
-                {["Joma Top Flex", "Tenis Joma", "Zapato seguridad", "Bota PVC"].map((sample) => (
+                {["Joma Top Flex", "Gorra", "Mochila", "Balón", "Bota seguridad"].map((sample) => (
                   <button
                     type="button"
                     key={sample}
@@ -219,12 +219,12 @@ export function ShoeVisionModal({
                 {loading ? (
                   <>
                     <Sparkles className="w-4 h-4 animate-spin" />
-                    Analizando foto y consultando tallas en elcaminantecr.com/tienda/...
+                    Analizando foto y consultando stock en elcaminantecr.com/tienda/...
                   </>
                 ) : (
                   <>
                     <Search className="w-4 h-4" />
-                    Identificar Modelo y Ver Tallas / Precio en Vivo
+                    Identificar Producto y Ver Stock / Precio en Vivo
                   </>
                 )}
               </button>

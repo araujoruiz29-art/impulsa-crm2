@@ -472,7 +472,7 @@ export default function BandejaPage() {
               className="btn-brand inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl shadow-sm"
             >
               <Camera className="w-4 h-4" />
-              Foto Zapato → Stock
+              Buscar por Foto · Stock
             </button>
           )}
           {!metaLiveConnected && (
