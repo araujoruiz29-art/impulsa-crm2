@@ -44,6 +44,12 @@ interface DashboardData {
     score: number;
     client?: { id: string; company: string } | null;
   }>;
+  connections?: {
+    companyName?: string;
+    whatsappConnected?: boolean;
+    emailConnected?: boolean;
+    aiConnected?: boolean;
+  };
   byStage: Record<string, { count: number; value: number }>;
   bySource: Record<string, number>;
   recentQuotes: Array<{
@@ -125,10 +131,10 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Tablero Comercial · Caminante Corporativo
+            Tablero Comercial · {data?.connections?.companyName || "Mi Empresa"}
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Resumen en tiempo real de clientes, proformas PDF (₡ IVA 13%), WhatsApp, correos y automatizaciones.
+            Resumen en tiempo real de clientes, proformas PDF, WhatsApp, correos y automatizaciones.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

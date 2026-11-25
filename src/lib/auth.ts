@@ -1,6 +1,14 @@
-// Edge-compatible Web Crypto HMAC-SHA256 session helper
+// Edge-compatible Web Crypto HMAC-SHA256 session helper (Multi-Tenant SaaS)
 
 export const SESSION_COOKIE = "impulsa_session";
+
+export type SessionRole = "SUPERADMIN" | "OWNER";
+
+export interface AuthSession {
+  userId: string;
+  email: string;
+  role: SessionRole;
+}
 
 export function getAuthConfig() {
   return {
@@ -25,30 +33,54 @@ async function hmacSign(payload: string, secret: string): Promise<string> {
     .join("");
 }
 
-export async function createSessionToken(email: string): Promise<string> {
+export async function createSessionToken(
+  email: string,
+  userId = "superadmin",
+  role: SessionRole = "SUPERADMIN"
+): Promise<string> {
   const { secret } = getAuthConfig();
   const exp = Date.now() + 1000 * 60 * 60 * 24 * 14; // 14 days
-  const payload = `${email.toLowerCase()}|${exp}`;
+  const cleanEmail = email.trim().toLowerCase();
+  const payload = `${userId}|${cleanEmail}|${role}|${exp}`;
   const sig = await hmacSign(payload, secret);
   return `${payload}|${sig}`;
 }
 
-export async function verifySessionToken(token: string | undefined): Promise<{ email: string } | null> {
+export async function verifySessionToken(token: string | undefined): Promise<AuthSession | null> {
   if (!token) return null;
   const parts = token.split("|");
-  if (parts.length !== 3) return null;
-  const [email, expStr, sig] = parts;
-  const exp = Number(expStr);
-  if (!email || !Number.isFinite(exp) || Date.now() > exp) return null;
-
   const { secret } = getAuthConfig();
-  const expected = await hmacSign(`${email}|${expStr}`, secret);
-  if (sig.length !== expected.length) return null;
 
-  let diff = 0;
-  for (let i = 0; i < sig.length; i++) {
-    diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
+  // New multi-tenant format: userId|email|role|exp|sig
+  if (parts.length === 5) {
+    const [userId, email, roleRaw, expStr, sig] = parts;
+    const exp = Number(expStr);
+    if (!userId || !email || !Number.isFinite(exp) || Date.now() > exp) return null;
+    const role: SessionRole = roleRaw === "SUPERADMIN" ? "SUPERADMIN" : "OWNER";
+    const expected = await hmacSign(`${userId}|${email}|${role}|${expStr}`, secret);
+    if (sig.length !== expected.length) return null;
+    let diff = 0;
+    for (let i = 0; i < sig.length; i++) {
+      diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
+    }
+    if (diff !== 0) return null;
+    return { userId, email, role };
   }
-  if (diff !== 0) return null;
-  return { email };
+
+  // Legacy 3-part token compatibility: email|exp|sig (treated as SUPERADMIN)
+  if (parts.length === 3) {
+    const [email, expStr, sig] = parts;
+    const exp = Number(expStr);
+    if (!email || !Number.isFinite(exp) || Date.now() > exp) return null;
+    const expected = await hmacSign(`${email}|${expStr}`, secret);
+    if (sig.length !== expected.length) return null;
+    let diff = 0;
+    for (let i = 0; i < sig.length; i++) {
+      diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
+    }
+    if (diff !== 0) return null;
+    return { userId: "superadmin", email, role: "SUPERADMIN" };
+  }
+
+  return null;
 }

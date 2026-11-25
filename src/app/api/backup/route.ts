@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getActiveWorkspaceId } from "@/lib/workspace";
+import { getActiveWorkspaceId, getCurrentSession } from "@/lib/workspace";
 
-// GET: Download full backup JSON (add ?full=1 to include ALL workspaces + integrations + email accounts for cloud migration!)
+// GET: Download backup JSON (?full=1 is restricted to SUPERADMIN; OWNER exports only their own workspace)
 export async function GET(req: NextRequest) {
+  const session = await getCurrentSession();
+  const isSuperAdmin = !session || session.role === "SUPERADMIN";
   const { searchParams } = new URL(req.url);
-  const fullMigration = searchParams.get("full") === "1";
+  const fullMigration = searchParams.get("full") === "1" && isSuperAdmin;
   const workspaceId = await getActiveWorkspaceId();
   const whereWs = fullMigration ? {} : { workspaceId };
   const whereId = fullMigration ? {} : { id: workspaceId };
@@ -65,9 +67,16 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// POST: Restore / Import a full migration backup JSON into the cloud PostgreSQL (or local SQLite) database
+// POST: Restore / Import a full migration backup JSON (restricted to SUPERADMIN)
 export async function POST(req: NextRequest) {
   try {
+    const session = await getCurrentSession();
+    if (session && session.role !== "SUPERADMIN") {
+      return NextResponse.json(
+        { error: "Solo el administrador principal puede restaurar migraciones completas." },
+        { status: 403 }
+      );
+    }
     const data = await req.json();
     const counts: Record<string, number> = {};
 

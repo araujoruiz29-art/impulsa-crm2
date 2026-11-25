@@ -1081,6 +1081,35 @@ export default function ConfiguracionPage() {
                 >
                   Solo vaciar catálogo
                 </button>
+                <button
+                  type="button"
+                  disabled={testing}
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        "¿Dejar el Tablero en CERO (borrar proformas de prueba, clientes demo sin correo, tareas demo y marcar correos como leídos)?\n\nTus mensajes de correo corporativo, horarios y conexiones de WhatsApp/IA seguirán intactos."
+                      )
+                    ) {
+                      return;
+                    }
+                    setTesting(true);
+                    setStatusMsg("");
+                    try {
+                      const res = await fetch("/api/cleanup", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ clearDemoBoard: true }),
+                      });
+                      const data = await res.json();
+                      setStatusMsg(res.ok ? `✅ ${data.message}` : `❌ ${data.error}`);
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl"
+                >
+                  <Trash2 className="w-4 h-4" /> Dejar Tablero en Cero (proformas, clientes y tareas demo)
+                </button>
               </div>
             </div>
           </div>

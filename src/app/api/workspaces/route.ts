@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getActiveWorkspaceId, WORKSPACE_COOKIE } from "@/lib/workspace";
+import { getActiveWorkspaceId, getCurrentSession, WORKSPACE_COOKIE } from "@/lib/workspace";
 
 export async function GET() {
+  const session = await getCurrentSession();
   const activeId = await getActiveWorkspaceId();
+
+  // Strict multi-tenant isolation: OWNER sees ONLY their own companies; SUPERADMIN sees all
   const companies = await prisma.companySettings.findMany({
+    where:
+      session && session.role !== "SUPERADMIN"
+        ? { ownerUserId: session.userId }
+        : undefined,
     orderBy: { createdAt: "asc" },
   });
 
@@ -34,12 +41,20 @@ export async function GET() {
     ? activeId
     : workspaces[0]?.id || "default";
 
-  return NextResponse.json({ activeWorkspaceId: resolvedActive, workspaces });
+  return NextResponse.json({
+    activeWorkspaceId: resolvedActive,
+    role: session?.role || "SUPERADMIN",
+    userEmail: session?.email || "",
+    workspaces,
+  });
 }
 
-// Create a brand new company workspace (multi-tenant)
+// Create a brand new company workspace owned by the logged-in user
 export async function POST(req: NextRequest) {
   try {
+    const session = await getCurrentSession();
+    const ownerUserId = session?.role === "SUPERADMIN" || !session ? "superadmin" : session.userId;
+
     const body = await req.json();
     const brandName = String(body.brandName || "").trim();
     if (!brandName) {
@@ -68,6 +83,7 @@ export async function POST(req: NextRequest) {
     const company = await prisma.companySettings.create({
       data: {
         id: slug,
+        ownerUserId,
         brandName,
         companyName: String(body.companyName || brandName),
         primaryColor,
@@ -77,7 +93,7 @@ export async function POST(req: NextRequest) {
         phone: String(body.phone || ""),
         whatsapp: String(body.whatsapp || ""),
         sinpePhone: String(body.sinpePhone || ""),
-        email: String(body.email || ""),
+        email: String(body.email || session?.email || ""),
         secondaryEmail: String(body.secondaryEmail || ""),
         billingEmail: String(body.billingEmail || ""),
         defaultSeller,
@@ -95,19 +111,19 @@ export async function POST(req: NextRequest) {
       data: {
         id: slug,
         smtpFromName: brandName,
-        smtpFromEmail: String(body.email || ""),
+        smtpFromEmail: String(body.email || session?.email || ""),
         metaVerifyToken: `${slug}_verify`,
         aiSystemPrompt: `Eres el asistente comercial de ${brandName}. Responde con amabilidad, califica al cliente preguntando qué busca, cantidad y presupuesto, y pasa al vendedor cuando esté listo para comprar.`,
         aiKnowledgeBase: `Empresa: ${brandName}\nMoneda: ${defaultCurrency}\nImpuesto: ${Math.round(defaultTaxRate * 100)}% (${defaultTaxMode})`,
       },
     });
 
-    // Seed baseline automation rule for the new workspace
     await prisma.automationRule.create({
       data: {
         workspaceId: slug,
         name: "Respuesta inteligente de IA en WhatsApp",
-        description: "Responde consultas nuevas, califica el interés y avisa al vendedor cuando el cliente está listo para comprar.",
+        description:
+          "Responde consultas nuevas, califica el interés y avisa al vendedor cuando el cliente está listo para comprar.",
         trigger: "NEW_WHATSAPP_MESSAGE",
         channel: "WHATSAPP",
         delayHours: 0,
@@ -129,13 +145,17 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Switch active workspace
+// Switch active workspace (strictly verified for ownership)
 export async function PATCH(req: NextRequest) {
+  const session = await getCurrentSession();
   const body = await req.json();
   const workspaceId = String(body.workspaceId || "default");
   const exists = await prisma.companySettings.findUnique({ where: { id: workspaceId } });
   if (!exists) {
     return NextResponse.json({ error: "Empresa no encontrada." }, { status: 404 });
+  }
+  if (session && session.role !== "SUPERADMIN" && exists.ownerUserId !== session.userId) {
+    return NextResponse.json({ error: "No tienes acceso a esta empresa." }, { status: 403 });
   }
   const res = NextResponse.json({ ok: true, activeWorkspaceId: workspaceId });
   res.cookies.set(WORKSPACE_COOKIE, workspaceId, {

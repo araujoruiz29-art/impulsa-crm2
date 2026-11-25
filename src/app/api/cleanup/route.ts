@@ -11,6 +11,9 @@ export async function POST(req: NextRequest) {
       conversations: 0,
       products: 0,
       alerts: 0,
+      quotes: 0,
+      activities: 0,
+      clients: 0,
     };
 
     // Delete a single conversation by ID
@@ -75,10 +78,54 @@ export async function POST(req: NextRequest) {
       deleted.alerts += alertDel.count;
     }
 
+    // Reset Dashboard demo metrics to zero while preserving all corporate EMAIL threads, settings, schedules & connections
+    if (body.clearDemoBoard) {
+      const [quoteDel, actDel, alertDel] = await Promise.all([
+        prisma.quote.deleteMany({ where: { workspaceId } }),
+        prisma.activity.deleteMany({ where: { workspaceId } }),
+        prisma.sellerAlert.deleteMany({ where: { workspaceId } }),
+      ]);
+      deleted.quotes += quoteDel.count;
+      deleted.activities += actDel.count;
+      deleted.alerts += alertDel.count;
+
+      // Find clients that belong to existing EMAIL conversations so real email threads keep their link
+      const emailConvs = await prisma.conversation.findMany({
+        where: { workspaceId, channel: "EMAIL" },
+        select: { clientId: true },
+      });
+      const keepClientIds = emailConvs
+        .map((c) => c.clientId)
+        .filter((id): id is string => Boolean(id));
+
+      // Delete demo clients not tied to any EMAIL conversation
+      const clientDel = await prisma.client.deleteMany({
+        where: {
+          workspaceId,
+          ...(keepClientIds.length > 0 ? { id: { notIn: keepClientIds } } : {}),
+        },
+      });
+      deleted.clients += clientDel.count;
+
+      // Zero out estimatedValue on remaining email-linked contacts & mark synced emails as read
+      await Promise.all([
+        prisma.client.updateMany({
+          where: { workspaceId },
+          data: { estimatedValue: 0 },
+        }),
+        prisma.conversation.updateMany({
+          where: { workspaceId, channel: "EMAIL" },
+          data: { unreadCount: 0 },
+        }),
+      ]);
+    }
+
     return NextResponse.json({
       ok: true,
       deleted,
-      message: `Limpieza completada: ${deleted.conversations} chats de prueba, ${deleted.products} artículos del catálogo y ${deleted.alerts} avisos eliminados. Tus correos corporativos, clientes, proformas y horarios siguen intactos.`,
+      message: body.clearDemoBoard
+        ? `Tablero en cero listo: ${deleted.quotes} proformas demo, ${deleted.clients} clientes demo, ${deleted.activities} tareas y ${deleted.alerts} avisos eliminados; correos marcados como leídos. Tus correos, horarios y conexiones siguen intactos.`
+        : `Limpieza completada: ${deleted.conversations} chats de prueba, ${deleted.products} artículos del catálogo y ${deleted.alerts} avisos eliminados. Tus correos corporativos, clientes, proformas y horarios siguen intactos.`,
     });
   } catch (err) {
     console.error("Cleanup error:", err);

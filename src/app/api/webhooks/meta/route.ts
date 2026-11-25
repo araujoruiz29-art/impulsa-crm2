@@ -8,41 +8,67 @@ import { qualifyLeadAndNotifySeller } from "@/lib/ai-agent";
 import { downloadMetaWhatsAppImage, identifyShoeAndFetchLiveStock } from "@/lib/vision-stock";
 import { sendWhatsAppCloudMessage } from "@/lib/meta";
 
-// Official Meta Webhook Verification (GET)
+// Official Meta Webhook Verification (GET) - Multi-tenant across all workspaces
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("hub.mode");
-  const token = searchParams.get("hub.verify_token");
+  const token = searchParams.get("hub.verify_token") || "";
   const challenge = searchParams.get("hub.challenge");
 
-  const cfg = await getIntegrationSettings();
-  const expectedToken = cfg.metaVerifyToken || "caminante_meta_verify_2026";
-
-  if (mode === "subscribe" && token === expectedToken && challenge) {
-    return new NextResponse(challenge, { status: 200 });
+  if (mode === "subscribe" && token && challenge) {
+    if (token === "caminante_meta_verify_2026") {
+      return new NextResponse(challenge, { status: 200 });
+    }
+    const matched = await prisma.integrationSettings.findFirst({
+      where: { metaVerifyToken: token },
+      select: { id: true },
+    });
+    if (matched) {
+      return new NextResponse(challenge, { status: 200 });
+    }
   }
   return NextResponse.json({ error: "Token de verificación Meta inválido." }, { status: 403 });
 }
 
-// Official Meta Webhook Receiver (WhatsApp Cloud API, Messenger/IG, Lead Ads)
+// Official Meta Webhook Receiver (Multi-tenant: routes by phone_number_id / page_id)
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
-    const cfg = await getIntegrationSettings();
+    const payload = JSON.parse(rawBody);
+    const entries = Array.isArray(payload.entry) ? payload.entry : [];
+
+    // Resolve target workspace from Meta phone_number_id (fallback to "default")
+    let targetWorkspaceId = "default";
+    const firstPhoneId = entries[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+    if (firstPhoneId) {
+      const matched = await prisma.integrationSettings.findFirst({
+        where: { metaPhoneNumberId: String(firstPhoneId) },
+        select: { id: true },
+      });
+      if (matched) targetWorkspaceId = matched.id;
+    }
+
+    const cfg = await getIntegrationSettings(targetWorkspaceId);
     const sig = req.headers.get("x-hub-signature-256");
 
     if (!verifyMetaWebhookSignature(rawBody, sig, cfg.metaAppSecret)) {
       return NextResponse.json({ error: "Firma X-Hub-Signature-256 inválida." }, { status: 401 });
     }
 
-    const payload = JSON.parse(rawBody);
-    const entries = Array.isArray(payload.entry) ? payload.entry : [];
-
     for (const entry of entries) {
       // 1. WhatsApp Cloud API & Leadgen changes
       const changes = Array.isArray(entry.changes) ? entry.changes : [];
       for (const change of changes) {
         const value = change.value || {};
+        let wsId = targetWorkspaceId;
+        if (value.metadata?.phone_number_id) {
+          const m = await prisma.integrationSettings.findFirst({
+            where: { metaPhoneNumberId: String(value.metadata.phone_number_id) },
+            select: { id: true },
+          });
+          if (m) wsId = m.id;
+        }
+        const wsCfg = wsId === targetWorkspaceId ? cfg : await getIntegrationSettings(wsId);
 
         // A. WhatsApp inbound messages
         if (change.field === "messages" && Array.isArray(value.messages)) {
@@ -65,7 +91,7 @@ export async function POST(req: NextRequest) {
               const audioRes = await downloadAndTranscribeMetaAudio(String(msg.audio.id));
               rawTextForAi = audioRes.transcript;
               bodyText = `🎤 [Nota de voz transcrita (${audioRes.provider})]:\n${audioRes.transcript}`;
-            } else if (isImage) {
+            } else if (isImage && wsId === "default") {
               const img = await downloadMetaWhatsAppImage(String(msg.image.id));
               if (img) {
                 const stockRes = await identifyShoeAndFetchLiveStock({
@@ -86,11 +112,12 @@ export async function POST(req: NextRequest) {
             }
 
             let client = await prisma.client.findFirst({
-              where: { OR: [{ whatsapp: from }, { phone: from }] },
+              where: { workspaceId: wsId, OR: [{ whatsapp: from }, { phone: from }] },
             });
             if (!client) {
               client = await prisma.client.create({
                 data: {
+                  workspaceId: wsId,
                   company: profileName,
                   contactName: profileName,
                   phone: from,
@@ -103,11 +130,12 @@ export async function POST(req: NextRequest) {
             }
 
             let conv = await prisma.conversation.findFirst({
-              where: { channel: "WHATSAPP", externalId: from },
+              where: { workspaceId: wsId, channel: "WHATSAPP", externalId: from },
             });
             if (!conv) {
               conv = await prisma.conversation.create({
                 data: {
+                  workspaceId: wsId,
                   channel: "WHATSAPP",
                   externalId: from,
                   subject: profileName,
@@ -147,8 +175,12 @@ export async function POST(req: NextRequest) {
               isAudio: Boolean(isAudio),
             });
 
-            if (autoVisionReply && conv.aiEnabled && !cfg.aiGlobalPaused) {
-              const waRes = await sendWhatsAppCloudMessage({ to: from, text: autoVisionReply });
+            if (autoVisionReply && conv.aiEnabled && !wsCfg.aiGlobalPaused) {
+              const waRes = await sendWhatsAppCloudMessage({
+                workspaceId: wsId,
+                to: from,
+                text: autoVisionReply,
+              });
               await prisma.message.create({
                 data: {
                   conversationId: conv.id,
@@ -166,8 +198,9 @@ export async function POST(req: NextRequest) {
                   lastMessagePreview: autoVisionReply.slice(0, 140),
                 },
               });
-            } else if (!cfg.aiGlobalPaused) {
+            } else if (!wsCfg.aiGlobalPaused) {
               await runTriggerAutomations("NEW_WHATSAPP_MESSAGE", {
+                workspaceId: wsId,
                 clientId: client.id,
                 conversationId: conv.id,
                 messageBody: rawTextForAi,

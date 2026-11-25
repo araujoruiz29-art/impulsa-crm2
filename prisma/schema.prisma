@@ -8,9 +8,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Usuarios registrados para acceso multiempresa aislado (SaaS)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String   @default("")
+  passwordHash String
+  role         String   @default("OWNER") // "SUPERADMIN" | "OWNER"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 // Cada fila de CompanySettings representa una Empresa (Workspace) independiente.
 model CompanySettings {
   id                  String   @id @default("default")
+  ownerUserId         String   @default("superadmin")
   companyName         String   @default("Esquivel y Alfaro El Caminante S.A")
   brandName           String   @default("Caminante Corporativo")
   primaryColor        String   @default("#1E1046")

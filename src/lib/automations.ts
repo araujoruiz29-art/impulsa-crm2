@@ -5,6 +5,7 @@ import { sendWhatsAppCloudMessage } from "./meta";
 import { sendCorporateEmail } from "./email";
 
 export interface TriggerContext {
+  workspaceId?: string;
   clientId?: string;
   conversationId?: string;
   quoteId?: string;
@@ -17,8 +18,9 @@ function renderTemplate(template: string, vars: Record<string, string>) {
 }
 
 export async function runTriggerAutomations(trigger: string, ctx: TriggerContext) {
+  const workspaceId = ctx.workspaceId || "default";
   const rules = await prisma.automationRule.findMany({
-    where: { trigger, active: true },
+    where: { workspaceId, trigger, active: true },
   });
 
   const executed: string[] = [];
@@ -58,7 +60,7 @@ export async function runTriggerAutomations(trigger: string, ctx: TriggerContext
         });
         summary = `Cliente ${client.company} movido a ${rule.targetStage}.`;
       } else if (rule.actionType === "AI_REPLY" && ctx.conversationId && ctx.messageBody) {
-        const cfg = await getIntegrationSettings();
+        const cfg = await getIntegrationSettings(workspaceId);
         const conv = await prisma.conversation.findUnique({
           where: { id: ctx.conversationId },
           include: { messages: { orderBy: { createdAt: "asc" }, take: 10 } },
@@ -67,6 +69,7 @@ export async function runTriggerAutomations(trigger: string, ctx: TriggerContext
           summary = "Omitido: CRM en Modo Manual Total (IA global pausada).";
         } else if (conv && conv.aiEnabled) {
           const ai = await generateAiReply({
+            workspaceId,
             userMessage: ctx.messageBody,
             channel: conv.channel,
             clientName: client?.contactName || client?.company,
@@ -80,6 +83,7 @@ export async function runTriggerAutomations(trigger: string, ctx: TriggerContext
           let status = "SIMULATED";
           if (conv.channel === "WHATSAPP" && conv.externalId) {
             const waRes = await sendWhatsAppCloudMessage({
+              workspaceId,
               to: conv.externalId,
               text: ai.reply,
             });
@@ -90,7 +94,7 @@ export async function runTriggerAutomations(trigger: string, ctx: TriggerContext
             data: {
               conversationId: conv.id,
               direction: "OUTBOUND",
-              senderName: "Agente IA Caminante",
+              senderName: "Agente IA",
               senderRole: "AI",
               body: ai.reply,
               status,
@@ -102,6 +106,7 @@ export async function runTriggerAutomations(trigger: string, ctx: TriggerContext
             for (const photo of ai.storePhotos.slice(0, 3)) {
               const caption = `*${photo.name}* (Ref: ${photo.sku})\n💰 ${photo.priceText} IVA incl.\n📏 ${photo.sizesSummary}\n🔗 ${photo.url}`;
               const imgRes = await sendWhatsAppCloudMessage({
+                workspaceId,
                 to: conv.externalId,
                 text: caption,
                 imageUrl: photo.imageUrl,

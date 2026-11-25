@@ -56,37 +56,67 @@ export async function getCompanySettings(explicitWorkspaceId?: string) {
     where: { id: workspaceId },
   });
   if (!settings) {
-    // Fallback to default if cookie pointed to deleted workspace
-    settings = await prisma.companySettings.findUnique({ where: { id: "default" } });
-  }
-  if (!settings) {
-    settings = await prisma.companySettings.create({
-      data: {
-        id: "default",
-        bankAccountsJson: JSON.stringify([
-          {
-            bank: "Banco Nacional de Costa Rica (BN)",
-            accountNumber: "100-01-012-009956-0",
-            iban: "CR93015101210010099565",
-          },
-          {
-            bank: "Banco de Costa Rica (BCR)",
-            accountNumber: "215-0009236-3",
-            iban: "CR82015201215000923631",
-          },
-          {
-            bank: "Banco BAC",
-            accountNumber: "917581761",
-            iban: "CR19010200009175817612",
-          },
-          {
-            bank: "Banco Davivienda",
-            accountNumber: "",
-            iban: "CR65010406940300320211",
-          },
-        ]),
-      },
-    });
+    if (workspaceId === "default") {
+      settings = await prisma.companySettings.create({
+        data: {
+          id: "default",
+          ownerUserId: "superadmin",
+          bankAccountsJson: JSON.stringify([
+            {
+              bank: "Banco Nacional de Costa Rica (BN)",
+              accountNumber: "100-01-012-009956-0",
+              iban: "CR93015101210010099565",
+            },
+            {
+              bank: "Banco de Costa Rica (BCR)",
+              accountNumber: "215-0009236-3",
+              iban: "CR82015201215000923631",
+            },
+            {
+              bank: "Banco BAC",
+              accountNumber: "917581761",
+              iban: "CR19010200009175817612",
+            },
+            {
+              bank: "Banco Davivienda",
+              accountNumber: "",
+              iban: "CR65010406940300320211",
+            },
+          ]),
+        },
+      });
+    } else {
+      const now = new Date();
+      return {
+        id: workspaceId,
+        ownerUserId: "",
+        companyName: "Mi Empresa",
+        brandName: "Mi Empresa",
+        primaryColor: "#22115d",
+        accentColor: "#0070C0",
+        legalId: "",
+        address: "",
+        phone: "",
+        whatsapp: "",
+        sinpePhone: "",
+        email: "",
+        secondaryEmail: "",
+        billingEmail: "",
+        defaultSeller: "Administrador",
+        defaultCurrency: "CRC",
+        defaultTaxRate: 0.13,
+        defaultTaxMode: "IVA_INCLUIDO",
+        defaultPaymentTerms: "CONTADO",
+        defaultValidity: "30 días",
+        nextQuoteNumber: 1001,
+        footerMotto: "Gracias por su preferencia",
+        bankAccountsJson: "[]",
+        logoPath: "",
+        sinpeLogoPath: "",
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
   }
   return settings;
 }

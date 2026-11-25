@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getCompanySettings, getIntegrationSettings, prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/workspace";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const workspaceId = await getActiveWorkspaceId();

@@ -15,6 +15,7 @@ export interface StorePhotoCard {
 }
 
 export interface AiReplyInput {
+  workspaceId?: string;
   userMessage: string;
   channel?: string;
   clientName?: string;
@@ -253,12 +254,14 @@ async function lookupLiveStoreForQuery(userMessage: string): Promise<{
 }
 
 export async function generateAiReply(input: AiReplyInput) {
-  const workspaceId = await getActiveWorkspaceId();
+  const workspaceId = input.workspaceId || (await getActiveWorkspaceId());
   const cfg = await getIntegrationSettings(workspaceId);
   const [catalog, docs, liveStore] = await Promise.all([
     buildCatalogContext(workspaceId),
     buildDocumentsContext(workspaceId),
-    lookupLiveStoreForQuery(input.userMessage),
+    workspaceId === "default"
+      ? lookupLiveStoreForQuery(input.userMessage)
+      : Promise.resolve({ contextText: "", photos: [] as StorePhotoCard[] }),
   ]);
 
   const todayCR = new Date().toLocaleDateString("es-CR", {

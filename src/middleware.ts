@@ -4,6 +4,7 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
+  "/api/auth/register",
   "/api/auth/logout",
   "/api/webhooks/meta",
 ];

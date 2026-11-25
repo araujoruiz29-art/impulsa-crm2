@@ -8,6 +8,7 @@ export interface SendWhatsAppInput {
   imageUrl?: string;
   documentUrl?: string;
   documentFilename?: string;
+  workspaceId?: string;
 }
 
 export function buildWhatsAppDesktopLinks(phone: string, text: string) {
@@ -21,7 +22,7 @@ export function buildWhatsAppDesktopLinks(phone: string, text: string) {
 }
 
 export async function sendWhatsAppCloudMessage(input: SendWhatsAppInput) {
-  const cfg = await getIntegrationSettings();
+  const cfg = await getIntegrationSettings(input.workspaceId);
   const to = normalizeCRPhone(input.to);
 
   if (!to) {
