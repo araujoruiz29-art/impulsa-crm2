@@ -68,6 +68,8 @@ export default function BandejaPage() {
   const [aiDrafting, setAiDrafting] = useState(false);
   const [syncingEmail, setSyncingEmail] = useState(false);
   const [statusBanner, setStatusBanner] = useState("");
+  const [aiGlobalPaused, setAiGlobalPaused] = useState(false);
+  const [togglingGlobalAi, setTogglingGlobalAi] = useState(false);
 
   // Simulator modal for testing WhatsApp / Meta Lead Ads locally
   const [simOpen, setSimOpen] = useState(false);
@@ -105,6 +107,39 @@ export default function BandejaPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelFilter]);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.integrations) {
+          setAiGlobalPaused(Boolean(d.integrations.aiGlobalPaused));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleGlobalAiMode = async () => {
+    setTogglingGlobalAi(true);
+    const nextPaused = !aiGlobalPaused;
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ integrations: { aiGlobalPaused: nextPaused } }),
+      });
+      if (res.ok) {
+        setAiGlobalPaused(nextPaused);
+        setStatusBanner(
+          nextPaused
+            ? "✋ Modo Manual Total ACTIVADO: la IA no responderá automáticamente ningún chat nuevo hasta que la vuelvas a encender."
+            : "🤖 IA Automática ACTIVADA: el Agente de IA volverá a responder mensajes, audios y fotos automáticamente."
+        );
+      }
+    } finally {
+      setTogglingGlobalAi(false);
+    }
+  };
 
   const activeConv = conversations.find((c) => c.id === activeId) || null;
 
@@ -254,6 +289,19 @@ export default function BandejaPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={toggleGlobalAiMode}
+            disabled={togglingGlobalAi}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition shadow-xs ${
+              aiGlobalPaused
+                ? "bg-amber-100 border-amber-300 text-amber-950 hover:bg-amber-200"
+                : "bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100"
+            }`}
+            title="Alterna entre respuesta 100% manual en todos los chats o respuesta automática del Agente de IA"
+          >
+            <Bot className="w-4 h-4" />
+            {aiGlobalPaused ? "Modo Manual Total (IA Apagada)" : "IA Automática: ACTIVA"}
+          </button>
           <button
             onClick={syncImap}
             disabled={syncingEmail}

@@ -24,6 +24,7 @@ import {
   Check,
   Plus,
   LogOut,
+  FileQuestion,
 } from "lucide-react";
 
 interface WorkspaceSummary {
@@ -65,6 +66,7 @@ const NAV_GROUPS = [
       { href: "/conocimiento", label: "Conocimiento y docs", icon: BookOpen },
       { href: "/automatizaciones", label: "Agente IA y reglas", icon: Bot },
       { href: "/configuracion", label: "Conexiones y empresa", icon: Settings },
+      { href: "/manual", label: "Manual de uso", icon: FileQuestion },
     ],
   },
 ];

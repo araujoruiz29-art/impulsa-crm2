@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
               isAudio: Boolean(isAudio),
             });
 
-            if (autoVisionReply && conv.aiEnabled) {
+            if (autoVisionReply && conv.aiEnabled && !cfg.aiGlobalPaused) {
               const waRes = await sendWhatsAppCloudMessage({ to: from, text: autoVisionReply });
               await prisma.message.create({
                 data: {
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
                   lastMessagePreview: autoVisionReply.slice(0, 140),
                 },
               });
-            } else {
+            } else if (!cfg.aiGlobalPaused) {
               await runTriggerAutomations("NEW_WHATSAPP_MESSAGE", {
                 clientId: client.id,
                 conversationId: conv.id,

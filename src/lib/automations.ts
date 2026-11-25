@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { getIntegrationSettings, prisma } from "./prisma";
 import { formatMoney } from "./format";
 import { generateAiReply } from "./ai-agent";
 import { sendWhatsAppCloudMessage } from "./meta";
@@ -58,11 +58,14 @@ export async function runTriggerAutomations(trigger: string, ctx: TriggerContext
         });
         summary = `Cliente ${client.company} movido a ${rule.targetStage}.`;
       } else if (rule.actionType === "AI_REPLY" && ctx.conversationId && ctx.messageBody) {
+        const cfg = await getIntegrationSettings();
         const conv = await prisma.conversation.findUnique({
           where: { id: ctx.conversationId },
           include: { messages: { orderBy: { createdAt: "asc" }, take: 10 } },
         });
-        if (conv && conv.aiEnabled) {
+        if (cfg.aiGlobalPaused) {
+          summary = "Omitido: CRM en Modo Manual Total (IA global pausada).";
+        } else if (conv && conv.aiEnabled) {
           const ai = await generateAiReply({
             userMessage: ctx.messageBody,
             channel: conv.channel,

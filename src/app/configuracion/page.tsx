@@ -786,6 +786,56 @@ export default function ConfiguracionPage() {
               </button>
             </div>
 
+            {/* Global Manual vs Automatic AI Mode */}
+            <div
+              className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                integrations.aiGlobalPaused
+                  ? "bg-amber-50 border-amber-300"
+                  : "bg-emerald-50/70 border-emerald-200"
+              }`}
+            >
+              <div>
+                <div className="font-bold text-slate-900 text-sm">
+                  {integrations.aiGlobalPaused
+                    ? "✋ Modo Actual: Respuesta 100% Manual (IA automática apagada para todo)"
+                    : "🤖 Modo Actual: Respuesta Automática con IA Activa (24/7)"}
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {integrations.aiGlobalPaused
+                    ? "Los mensajes, audios y fotos siguen entrando a tu Bandeja, pero el bot NO responde solo. Tú respondes manualmente o usando «Sugerencia IA (Borrador)»."
+                    : "El Agente IA responde automáticamente textos, notas de voz y fotos de zapatos (y se pausa solo cuando detecta intención de compra o pausas un chat individual)."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const nextPaused = !Boolean(integrations.aiGlobalPaused);
+                  setIntegrations({ ...integrations, aiGlobalPaused: nextPaused });
+                  const res = await fetch("/api/settings", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ integrations: { aiGlobalPaused: nextPaused } }),
+                  });
+                  if (res.ok) {
+                    setStatusMsg(
+                      nextPaused
+                        ? "✅ Activado Modo Manual Total: la IA no responderá automáticamente ningún chat."
+                        : "✅ Activada IA Automática 24/7."
+                    );
+                  }
+                }}
+                className={`px-4 py-2 text-xs font-bold rounded-xl shrink-0 ${
+                  integrations.aiGlobalPaused
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    : "bg-amber-600 hover:bg-amber-700 text-white"
+                }`}
+              >
+                {integrations.aiGlobalPaused
+                  ? "Activar IA Automática"
+                  : "Cambiar a Respuesta Manual Total"}
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600">Proveedor IA</label>

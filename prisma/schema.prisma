@@ -69,6 +69,7 @@ model IntegrationSettings {
   aiModel              String    @default("gemini-2.5-flash")
   aiAutoReplyWhatsapp  Boolean   @default(false)
   aiAutoReplyEmail     Boolean   @default(false)
+  aiGlobalPaused       Boolean   @default(false)
   aiSystemPrompt       String    @default("")
   aiKnowledgeBase      String    @default("")
   visionFoundTemplate  String    @default("")
