@@ -5,9 +5,34 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+function resolveRuntimeDbUrl(): string | undefined {
+  const candidates = [
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_URL,
+    process.env.POSTGRES_URL_NON_POOLING,
+    process.env.POSTGRES_PRISMA_URL,
+    process.env.STORAGE_POSTGRES_URL,
+    process.env.PRISMA_DATABASE_URL,
+  ];
+  for (const val of candidates) {
+    if (val && (val.startsWith("postgres://") || val.startsWith("postgresql://"))) {
+      return val;
+    }
+  }
+  for (const val of Object.values(process.env)) {
+    if (val && (val.startsWith("postgres://") || val.startsWith("postgresql://"))) {
+      return val;
+    }
+  }
+  return process.env.DATABASE_URL || process.env.PRISMA_DATABASE_URL;
+}
+
+const runtimeDbUrl = resolveRuntimeDbUrl();
+
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
+    ...(runtimeDbUrl ? { datasources: { db: { url: runtimeDbUrl } } } : {}),
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
