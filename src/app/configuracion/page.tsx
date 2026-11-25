@@ -1110,6 +1110,35 @@ export default function ConfiguracionPage() {
                 >
                   <Trash2 className="w-4 h-4" /> Dejar Tablero en Cero (proformas, clientes y tareas demo)
                 </button>
+                <button
+                  type="button"
+                  disabled={testing}
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        "¿Vaciar todas las tarjetas de Ventas · Kanban (contactos)?\n\nTus mensajes de correo en Conversaciones, horarios y conexiones NO se borran."
+                      )
+                    ) {
+                      return;
+                    }
+                    setTesting(true);
+                    setStatusMsg("");
+                    try {
+                      const res = await fetch("/api/cleanup", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ clearKanbanClients: true }),
+                      });
+                      const data = await res.json();
+                      setStatusMsg(res.ok ? `✅ ${data.message}` : `❌ ${data.error}`);
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-rose-200 text-rose-800 text-xs font-semibold rounded-xl hover:bg-rose-100/60"
+                >
+                  <Trash2 className="w-4 h-4" /> Limpiar Ventas Kanban
+                </button>
               </div>
             </div>
           </div>

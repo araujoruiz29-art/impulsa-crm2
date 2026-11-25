@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileText, MessageCircle, Plus } from "lucide-react";
+import { FileText, MessageCircle, Plus, Trash2 } from "lucide-react";
 import { CLIENT_STAGES, formatMoney, normalizeCRPhone } from "@/lib/format";
 
 interface ClientCard {
@@ -43,6 +43,28 @@ export default function EmbudoPage() {
     });
   };
 
+  const deleteCard = async (c: ClientCard) => {
+    if (!confirm(`¿Quitar "${c.company}" del Kanban? (No borra sus correos en Conversaciones).`)) return;
+    setClients((prev) => prev.filter((item) => item.id !== c.id));
+    await fetch(`/api/clients/${c.id}`, { method: "DELETE" });
+  };
+
+  const clearAllKanban = async () => {
+    if (
+      !confirm(
+        `¿Limpiar las ${clients.length} tarjetas actuales de Ventas · Kanban?\n\nTus correos corporativos en Conversaciones, horarios y conexiones NO se borran.`
+      )
+    ) {
+      return;
+    }
+    await fetch("/api/cleanup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clearKanbanClients: true }),
+    });
+    setClients([]);
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -52,12 +74,22 @@ export default function EmbudoPage() {
             Arrastra tarjetas entre etapas para dar seguimiento desde el primer contacto hasta el cierre.
           </p>
         </div>
-        <Link
-          href="/clientes"
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#0070C0] text-white rounded-xl hover:bg-[#005a9e]"
-        >
-          <Plus className="w-4 h-4" /> Gestionar Clientes
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {clients.length > 0 && (
+            <button
+              onClick={clearAllKanban}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl"
+            >
+              <Trash2 className="w-4 h-4" /> Limpiar Kanban ({clients.length})
+            </button>
+          )}
+          <Link
+            href="/clientes"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#0070C0] text-white rounded-xl hover:bg-[#005a9e]"
+          >
+            <Plus className="w-4 h-4" /> Gestionar Clientes
+          </Link>
+        </div>
       </div>
 
       <div className="flex gap-4 overflow-x-auto pb-4">
@@ -151,6 +183,13 @@ export default function EmbudoPage() {
                               <MessageCircle className="w-3.5 h-3.5" />
                             </a>
                           )}
+                          <button
+                            onClick={() => deleteCard(c)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50"
+                            title="Quitar tarjeta del Kanban"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
                     </div>

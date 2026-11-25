@@ -2,7 +2,16 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { BellRing, CheckCircle2, FileText, MessageSquare, Flame, RefreshCw } from "lucide-react";
+import {
+  BellRing,
+  CheckCircle2,
+  FileText,
+  MessageSquare,
+  Flame,
+  RefreshCw,
+  Bot,
+  Trash2,
+} from "lucide-react";
 import { formatDateCR, formatMoney } from "@/lib/format";
 
 interface AlertItem {
@@ -29,6 +38,7 @@ interface AlertItem {
 export default function AvisosPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [feedback, setFeedback] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -42,12 +52,37 @@ export default function AvisosPage() {
     load();
   }, []);
 
-  const toggleResolved = async (a: AlertItem) => {
+  const resolveAlert = async (a: AlertItem, reactivateAi: boolean) => {
     await fetch("/api/alerts", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: a.id, resolved: !a.resolved, read: true }),
+      body: JSON.stringify({
+        id: a.id,
+        resolved: !a.resolved,
+        read: true,
+        reactivateAi,
+      }),
     });
+    if (!a.resolved) {
+      setFeedback(
+        reactivateAi
+          ? "✅ Aviso marcado como atendido y Bot de IA reactivado para esa conversación."
+          : "✅ Aviso marcado como atendido (el bot sigue pausado en ese chat para que tú sigas respondiendo)."
+      );
+    }
+    load();
+  };
+
+  const deleteAlert = async (id: string) => {
+    if (!confirm("¿Eliminar este aviso del historial?")) return;
+    await fetch(`/api/alerts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    load();
+  };
+
+  const clearResolved = async () => {
+    if (!confirm("¿Limpiar todo el historial de avisos ya atendidos?")) return;
+    await fetch("/api/alerts?resolved=1", { method: "DELETE" });
+    setFeedback("✅ Historial de avisos atendidos limpiado.");
     load();
   };
 
@@ -73,6 +108,13 @@ export default function AvisosPage() {
           <RefreshCw className="w-4 h-4 text-slate-500" /> Actualizar
         </button>
       </div>
+
+      {feedback && (
+        <div className="px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
+          <span>{feedback}</span>
+          <button onClick={() => setFeedback("")} className="font-bold">✕</button>
+        </div>
+      )}
 
       {/* Pending High-Intent Alerts */}
       <div className="space-y-3">
@@ -125,10 +167,18 @@ export default function AvisosPage() {
                 <MessageSquare className="w-4 h-4" /> Tomar Chat (Bot pausado)
               </Link>
               <button
-                onClick={() => toggleResolved(a)}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl"
+                onClick={() => resolveAlert(a, true)}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl"
+                title="Cierra el aviso y vuelve a encender el Agente IA en ese chat"
               >
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Marcar Atendido
+                <Bot className="w-4 h-4" /> Resuelto + Reactivar IA
+              </button>
+              <button
+                onClick={() => resolveAlert(a, false)}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl"
+                title="Cierra el aviso pero deja el chat en modo manual"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Solo Marcar Resuelto
               </button>
             </div>
           </div>
@@ -143,24 +193,41 @@ export default function AvisosPage() {
       {/* Resolved history */}
       {resolved.length > 0 && (
         <div className="space-y-2.5 pt-2">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-            Avisos atendidos ({resolved.length})
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Avisos atendidos / resueltos ({resolved.length})
+            </h2>
+            <button
+              onClick={clearResolved}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-lg"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Limpiar resueltos
+            </button>
+          </div>
           {resolved.map((a) => (
             <div
               key={a.id}
-              className="bg-slate-50 rounded-xl border border-slate-200 p-3.5 flex items-center justify-between text-xs text-slate-600"
+              className="bg-slate-50 rounded-xl border border-slate-200 p-3.5 flex items-center justify-between gap-3 text-xs text-slate-600"
             >
               <div>
                 <span className="font-semibold text-slate-800">{a.title}</span>
                 <div className="text-slate-500 mt-0.5">{a.buyingSignals}</div>
               </div>
-              <button
-                onClick={() => toggleResolved(a)}
-                className="text-xs font-semibold text-[#0070C0] hover:underline shrink-0"
-              >
-                Reabrir
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => resolveAlert(a, false)}
+                  className="text-xs font-semibold text-[#0070C0] hover:underline"
+                >
+                  Reabrir
+                </button>
+                <button
+                  onClick={() => deleteAlert(a.id)}
+                  className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg"
+                  title="Eliminar aviso"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

@@ -120,10 +120,20 @@ export async function POST(req: NextRequest) {
       ]);
     }
 
+    // Clear ALL cards in Ventas · Kanban (Client rows) while preserving ALL corporate EMAIL conversations (onDelete: SetNull)
+    if (body.clearKanbanClients) {
+      const clientDel = await prisma.client.deleteMany({
+        where: { workspaceId },
+      });
+      deleted.clients += clientDel.count;
+    }
+
     return NextResponse.json({
       ok: true,
       deleted,
-      message: body.clearDemoBoard
+      message: body.clearKanbanClients
+        ? `Ventas Kanban limpio: se quitaron ${deleted.clients} tarjetas/contactos. Tus conversaciones de correo corporativo, horarios y conexiones siguen intactos.`
+        : body.clearDemoBoard
         ? `Tablero en cero listo: ${deleted.quotes} proformas demo, ${deleted.clients} clientes demo, ${deleted.activities} tareas y ${deleted.alerts} avisos eliminados; correos marcados como leídos. Tus correos, horarios y conexiones siguen intactos.`
         : `Limpieza completada: ${deleted.conversations} chats de prueba, ${deleted.products} artículos del catálogo y ${deleted.alerts} avisos eliminados. Tus correos corporativos, clientes, proformas y horarios siguen intactos.`,
     });
