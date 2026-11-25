@@ -7,11 +7,12 @@ const globalForPrisma = globalThis as unknown as {
 
 function resolveRuntimeDbUrl(): string | undefined {
   const candidates = [
-    process.env.DATABASE_URL,
     process.env.POSTGRES_URL,
     process.env.POSTGRES_URL_NON_POOLING,
-    process.env.POSTGRES_PRISMA_URL,
+    process.env.DATABASE_URL,
     process.env.STORAGE_POSTGRES_URL,
+    process.env.STORAGE_DATABASE_URL,
+    process.env.POSTGRES_PRISMA_URL,
     process.env.PRISMA_DATABASE_URL,
   ];
   for (const val of candidates) {
@@ -21,6 +22,11 @@ function resolveRuntimeDbUrl(): string | undefined {
   }
   for (const val of Object.values(process.env)) {
     if (val && (val.startsWith("postgres://") || val.startsWith("postgresql://"))) {
+      return val;
+    }
+  }
+  for (const val of Object.values(process.env)) {
+    if (val && val.startsWith("prisma+postgres://")) {
       return val;
     }
   }

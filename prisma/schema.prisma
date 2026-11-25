@@ -2,8 +2,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Local en PC con SQLite. Para migrar a la nube (PostgreSQL / Supabase),
-// cambia provider = "sqlite" y actualiza DATABASE_URL en .env.
+// Local en PC usa SQLite; en Vercel cambia automaticamente a PostgreSQL via scripts/prepare-db.mjs.
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")

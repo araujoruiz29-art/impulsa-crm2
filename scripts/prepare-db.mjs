@@ -49,6 +49,12 @@ function findDbEnvVar() {
       return { name, isPostgres: true };
     }
   }
+  for (const [name, raw] of Object.entries(process.env)) {
+    const val = cleanVal(raw);
+    if (val.startsWith("prisma+postgres://")) {
+      return { name, isPostgres: true };
+    }
+  }
 
   if (process.env.VERCEL === "1" || process.env.VERCEL === "true") {
     return { name: "DATABASE_URL", isPostgres: true };
@@ -60,14 +66,17 @@ function findDbEnvVar() {
 const found = findDbEnvVar();
 let schema = fs.readFileSync(schemaPath, "utf8");
 
-if (found.isPostgres) {
-  schema = schema.replace(/provider\s*=\s*"(?:sqlite|postgresql)"/, 'provider = "postgresql"');
-  schema = schema.replace(/url\s*=\s*env\("[^"]+"\)/, `url      = env("${found.name}")`);
-  fs.writeFileSync(schemaPath, schema, "utf8");
-  console.log(`[prepare-db] Switched Prisma datasource -> postgresql using env("${found.name}")`);
-} else {
-  schema = schema.replace(/provider\s*=\s*"(?:sqlite|postgresql)"/, 'provider = "sqlite"');
-  schema = schema.replace(/url\s*=\s*env\("[^"]+"\)/, 'url      = env("DATABASE_URL")');
-  fs.writeFileSync(schemaPath, schema, "utf8");
-  console.log('[prepare-db] Switched Prisma datasource -> sqlite using env("DATABASE_URL")');
+const targetProvider = found.isPostgres ? "postgresql" : "sqlite";
+const targetEnvVar = found.isPostgres ? found.name : "DATABASE_URL";
+
+const datasourceRegex = /datasource\s+db\s*\{[\s\S]*?\}/;
+if (!datasourceRegex.test(schema)) {
+  throw new Error("[prepare-db] Could not find datasource db { ... } block in prisma/schema.prisma");
 }
+
+schema = schema.replace(
+  datasourceRegex,
+  `datasource db {\n  provider = "${targetProvider}"\n  url      = env("${targetEnvVar}")\n}`
+);
+fs.writeFileSync(schemaPath, schema, "utf8");
+console.log(`[prepare-db] Switched Prisma datasource -> ${targetProvider} using env("${targetEnvVar}")`);
