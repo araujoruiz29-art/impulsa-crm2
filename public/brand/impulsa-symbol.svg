@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none">
+  <defs>
+    <linearGradient id="sun" x1="32" y1="20" x2="126" y2="143" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFEB22"/>
+      <stop offset=".47" stop-color="#FFDC08"/>
+      <stop offset="1" stop-color="#FFAA00"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="86" y1="28" x2="150" y2="53" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00B8EE"/>
+      <stop offset="1" stop-color="#1254FF"/>
+    </linearGradient>
+    <linearGradient id="pink" x1="16" y1="134" x2="73" y2="107" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F95599"/>
+      <stop offset="1" stop-color="#E82068"/>
+    </linearGradient>
+  </defs>
+  <path d="M53 15C71 15 86 29 86 48C86 67 94 80 113 80C132 80 146 94 146 113C146 132 132 146 113 146C94 146 80 132 80 113C80 94 67 81 48 81C29 81 15 67 15 48C15 29 32 15 53 15Z" fill="url(#sun)"/>
+  <path d="M53 15C69 21 74 35 74 49C74 74 87 91 111 91C134 91 142 111 136 133C143 127 146 120 146 113C146 94 132 80 113 80C94 80 86 67 86 48C86 29 71 15 53 15Z" fill="#FFBE00" opacity=".45"/>
+  <circle cx="123" cy="42" r="33" fill="#1254FF"/>
+  <circle cx="117" cy="47" r="29" fill="url(#blue)"/>
+  <circle cx="39" cy="121" r="33" fill="#F64C8D"/>
+  <circle cx="35" cy="125" r="28" fill="url(#pink)"/>
+</svg>

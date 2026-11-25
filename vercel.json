@@ -1,0 +1,24 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "pnpm run vercel-build",
+  "functions": {
+    "src/app/api/ai/vision-stock/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/ai/audio/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/ai/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/webhooks/meta/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/email/sync/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/quotes/[id]/send/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

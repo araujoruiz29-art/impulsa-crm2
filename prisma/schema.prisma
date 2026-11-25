@@ -1,0 +1,332 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Local en PC con SQLite. Para migrar a la nube (PostgreSQL / Supabase),
+// cambia provider = "sqlite" y actualiza DATABASE_URL en .env.
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Cada fila de CompanySettings representa una Empresa (Workspace) independiente.
+model CompanySettings {
+  id                  String   @id @default("default")
+  companyName         String   @default("Esquivel y Alfaro El Caminante S.A")
+  brandName           String   @default("Caminante Corporativo")
+  primaryColor        String   @default("#1E1046")
+  accentColor         String   @default("#0070C0")
+  legalId             String   @default("Cédula Jurídica N° 3-101-260251")
+  address             String   @default("200 m. este de la Escuela Juan Chaves")
+  phone               String   @default("2460-1975")
+  whatsapp            String   @default("8449-1975")
+  sinpePhone          String   @default("8691-1975")
+  email               String   @default("ventas@elcaminantecr.com")
+  secondaryEmail      String   @default("uniformes@elcaminantecr.com")
+  billingEmail        String   @default("fe@elcaminantecr.com")
+  defaultSeller       String   @default("Jelsing R.")
+  defaultCurrency     String   @default("CRC")
+  defaultTaxRate      Float    @default(0.13)
+  defaultTaxMode      String   @default("IVA_INCLUIDO")
+  defaultPaymentTerms String   @default("CONTADO")
+  defaultValidity     String   @default("30 días")
+  nextQuoteNumber     Int      @default(1409)
+  footerMotto         String   @default("Gracias por preferirnos! \"Jesús es mi Señor\"")
+  bankAccountsJson    String   @default("[]")
+  logoPath            String   @default("/brand/image1.png")
+  sinpeLogoPath       String   @default("/brand/image3.png")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// Configuracion de integraciones 1-a-1 por empresa (id === workspaceId)
+model IntegrationSettings {
+  id                   String    @id @default("default")
+  smtpHost             String    @default("")
+  smtpPort             Int       @default(465)
+  smtpSecure           Boolean   @default(true)
+  smtpUser             String    @default("")
+  smtpPass             String    @default("")
+  smtpFromName         String    @default("Caminante Corporativo")
+  smtpFromEmail        String    @default("ventas@elcaminantecr.com")
+  imapHost             String    @default("")
+  imapPort             Int       @default(993)
+  imapSecure           Boolean   @default(true)
+  imapUser             String    @default("")
+  imapPass             String    @default("")
+  imapLastSyncAt       DateTime?
+  metaAccessToken      String    @default("")
+  metaPhoneNumberId    String    @default("")
+  metaWabaId           String    @default("")
+  metaPageId           String    @default("")
+  metaIgAccountId      String    @default("")
+  metaAdAccountId      String    @default("")
+  metaVerifyToken      String    @default("caminante_meta_verify_2026")
+  metaAppSecret        String    @default("")
+  metaPublicWebhookUrl String    @default("")
+  metaAutoReply        Boolean   @default(false)
+  aiProvider           String    @default("gemini")
+  aiApiKey             String    @default("")
+  aiModel              String    @default("gemini-2.5-flash")
+  aiAutoReplyWhatsapp  Boolean   @default(false)
+  aiAutoReplyEmail     Boolean   @default(false)
+  aiSystemPrompt       String    @default("")
+  aiKnowledgeBase      String    @default("")
+  visionFoundTemplate  String    @default("")
+  visionFallbackTemplate String  @default("")
+  updatedAt            DateTime  @updatedAt
+}
+
+model Client {
+  id                  String         @id @default(cuid())
+  workspaceId         String         @default("default")
+  code                String         @default("")
+  company             String
+  contactName         String         @default("")
+  phone               String         @default("")
+  whatsapp            String         @default("")
+  email               String         @default("")
+  address             String         @default("")
+  stage               String         @default("NUEVO")
+  source              String         @default("WHATSAPP")
+  tags                String         @default("")
+  estimatedValue      Float          @default(0)
+  qualificationScore  Int            @default(25)
+  qualificationStatus String         @default("TIBIO")
+  optOut              Boolean        @default(false)
+  notes               String         @default("")
+  assignedTo          String         @default("Jelsing R.")
+  metaLeadId          String         @default("")
+  metaCampaign        String         @default("")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  quotes              Quote[]
+  conversations       Conversation[]
+  activities          Activity[]
+  alerts              SellerAlert[]
+
+  @@index([workspaceId])
+}
+
+model Product {
+  id              String      @id @default(cuid())
+  workspaceId     String      @default("default")
+  sku             String
+  name            String
+  category        String      @default("Uniformes")
+  description     String      @default("")
+  unit            String      @default("Unidad")
+  price           Float
+  cost            Float       @default(0)
+  wholesaleMinQty Int         @default(12)
+  wholesalePrice  Float?
+  stock           Int         @default(50)
+  imageUrl        String      @default("")
+  active          Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  quoteItems      QuoteItem[]
+
+  @@unique([workspaceId, sku])
+  @@index([workspaceId])
+}
+
+model Quote {
+  id             String      @id @default(cuid())
+  workspaceId    String      @default("default")
+  number         Int
+  clientId       String?
+  client         Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientCode     String      @default("")
+  clientCompany  String
+  clientContact  String      @default("")
+  clientAddress  String      @default("")
+  clientPhone    String      @default("")
+  clientEmail    String      @default("")
+  seller         String      @default("Jelsing R.")
+  jobTitle       String      @default("")
+  paymentTerms   String      @default("CONTADO")
+  validity       String      @default("30 días")
+  currency       String      @default("CRC")
+  taxMode        String      @default("IVA_INCLUIDO")
+  taxRate        Float       @default(0.13)
+  subtotal       Float       @default(0)
+  discountAmount Float       @default(0)
+  taxAmount      Float       @default(0)
+  total          Float       @default(0)
+  status         String      @default("BORRADOR")
+  notes          String      @default("")
+  issueDate      DateTime    @default(now())
+  sentAt         DateTime?
+  sentVia        String      @default("")
+  lastFollowUpAt DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  items          QuoteItem[]
+  activities     Activity[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId])
+}
+
+model QuoteItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sortOrder   Int      @default(0)
+  quantity    Float    @default(1)
+  title       String
+  description String   @default("")
+  unitPrice   Float    @default(0)
+  lineTotal   Float    @default(0)
+}
+
+model Conversation {
+  id                 String    @id @default(cuid())
+  workspaceId        String    @default("default")
+  channel            String    @default("WHATSAPP")
+  externalId         String    @default("")
+  accountEmail       String    @default("")
+  subject            String    @default("")
+  clientId           String?
+  client             Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  status             String    @default("ABIERTA")
+  aiEnabled          Boolean   @default(true)
+  unreadCount        Int       @default(0)
+  lastMessageAt      DateTime  @default(now())
+  lastMessagePreview String    @default("")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  messages           Message[]
+
+  @@index([workspaceId])
+}
+
+model Message {
+  id                String       @id @default(cuid())
+  conversationId    String
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction         String       @default("INBOUND")
+  senderName        String       @default("")
+  senderRole        String       @default("CLIENT")
+  subject           String       @default("")
+  body              String
+  externalMessageId String       @default("")
+  attachmentName    String       @default("")
+  attachmentUrl     String       @default("")
+  status            String       @default("SENT")
+  createdAt         DateTime     @default(now())
+}
+
+model AutomationRule {
+  id           String          @id @default(cuid())
+  workspaceId  String          @default("default")
+  name         String
+  description  String          @default("")
+  trigger      String
+  channel      String          @default("ALL")
+  delayHours   Int             @default(0)
+  actionType   String
+  templateText String          @default("")
+  targetStage  String          @default("")
+  active       Boolean         @default(true)
+  runCount     Int             @default(0)
+  lastRunAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  logs         AutomationLog[]
+
+  @@index([workspaceId])
+}
+
+model AutomationLog {
+  id          String          @id @default(cuid())
+  workspaceId String          @default("default")
+  ruleId      String?
+  rule        AutomationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  ruleName    String
+  clientId    String?
+  trigger     String
+  status      String          @default("SUCCESS")
+  summary     String
+  createdAt   DateTime        @default(now())
+
+  @@index([workspaceId])
+}
+
+model Activity {
+  id          String    @id @default(cuid())
+  workspaceId String    @default("default")
+  clientId    String?
+  client      Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  quoteId     String?
+  quote       Quote?    @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  type        String    @default("NOTA")
+  title       String
+  description String    @default("")
+  dueDate     DateTime?
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+model KnowledgeDocument {
+  id          String   @id @default(cuid())
+  workspaceId String   @default("default")
+  title       String
+  category    String   @default("Políticas")
+  fileName    String   @default("")
+  content     String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
+}
+
+model SellerAlert {
+  id                String   @id @default(cuid())
+  workspaceId       String   @default("default")
+  clientId          String?
+  client            Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  conversationId    String   @default("")
+  priority          String   @default("ALTA")
+  title             String
+  buyingSignals     String   @default("")
+  suggestedNextStep String   @default("")
+  score             Int      @default(80)
+  read              Boolean  @default(false)
+  resolved          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  @@index([workspaceId])
+}
+
+model EmailAccount {
+  id             String    @id @default(cuid())
+  workspaceId    String    @default("default")
+  label          String    @default("Correo Principal")
+  email          String
+  fromName       String    @default("Caminante Corporativo")
+  smtpHost       String    @default("mail.elcaminantecr.com")
+  smtpPort       Int       @default(465)
+  smtpSecure     Boolean   @default(true)
+  smtpUser       String    @default("")
+  smtpPass       String    @default("")
+  imapHost       String    @default("mail.elcaminantecr.com")
+  imapPort       Int       @default(993)
+  imapSecure     Boolean   @default(true)
+  imapUser       String    @default("")
+  imapPass       String    @default("")
+  imapLastSyncAt DateTime?
+  isDefault      Boolean   @default(false)
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+}
