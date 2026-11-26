@@ -149,6 +149,7 @@ export default function BandejaPage() {
   const [allConversations, setAllConversations] = useState<Conv[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccTab[]>([]);
   const [channelFilter, setChannelFilter] = useState("ALL");
+  const [intentFilter, setIntentFilter] = useState<"ALL" | "COMPRA" | "CONSULTA" | "INTERNO">("ALL");
   const [tabOrder, setTabOrder] = useState<string[]>([]);
   const [hiddenTabs, setHiddenTabs] = useState<string[]>([]);
   const [customizingTabs, setCustomizingTabs] = useState(false);
@@ -301,7 +302,33 @@ export default function BandejaPage() {
     return c.channel === tabId;
   };
 
-  const conversations = allConversations.filter((c) => matchesTab(c, channelFilter));
+  const getIntentCategory = (c: Conv): "COMPRA" | "CONSULTA" | "INTERNO" => {
+    if (c.client?.contactType && c.client.contactType !== "CLIENTE") return "INTERNO";
+    const qs = c.client?.qualificationStatus || "";
+    const score = c.client?.qualificationScore || 0;
+    if (
+      qs === "LISTO_PARA_COMPRAR" ||
+      qs === "CALIENTE" ||
+      score >= 50 ||
+      c.client?.stage === "NEGOCIACION" ||
+      c.client?.stage === "COTIZADO"
+    ) {
+      return "COMPRA";
+    }
+    return "CONSULTA";
+  };
+
+  const tabFilteredConversations = allConversations.filter((c) => matchesTab(c, channelFilter));
+  const intentCounts = {
+    ALL: tabFilteredConversations.length,
+    COMPRA: tabFilteredConversations.filter((c) => getIntentCategory(c) === "COMPRA").length,
+    CONSULTA: tabFilteredConversations.filter((c) => getIntentCategory(c) === "CONSULTA").length,
+    INTERNO: tabFilteredConversations.filter((c) => getIntentCategory(c) === "INTERNO").length,
+  };
+  const conversations =
+    intentFilter === "ALL"
+      ? tabFilteredConversations
+      : tabFilteredConversations.filter((c) => getIntentCategory(c) === intentFilter);
 
   useEffect(() => {
     if (conversations.length > 0 && !conversations.some((c) => c.id === activeId)) {
@@ -310,7 +337,7 @@ export default function BandejaPage() {
       setActiveId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelFilter, allConversations]);
+  }, [channelFilter, intentFilter, allConversations]);
 
   const moveTab = (tabId: string, dir: -1 | 1) => {
     const ids = orderedTabs.map((t) => t.id);
@@ -349,7 +376,11 @@ export default function BandejaPage() {
           setAiGlobalPaused(Boolean(d.integrations.aiGlobalPaused));
           setAiOnlyNewClients(Boolean(d.integrations.aiOnlyNewClients));
           setMetaLiveConnected(
-            Boolean(d.integrations.metaAccessToken && d.integrations.metaPhoneNumberId)
+            Boolean(
+              (d.integrations.metaAccessToken && d.integrations.metaPhoneNumberId) ||
+                ((d.integrations.metaPageAccessToken || d.integrations.metaAccessToken) &&
+                  (d.integrations.metaPageId || d.integrations.metaIgAccountId))
+            )
           );
         } else {
           setMetaLiveConnected(false);
@@ -881,6 +912,42 @@ export default function BandejaPage() {
         )}
       </div>
 
+      {/* AI Purchase Intent vs General Inquiry quick filter bar */}
+      <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-2xl px-3.5 py-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+          Clasificación IA:
+        </span>
+        {(
+          [
+            { id: "ALL", label: "Todos", activeCls: "bg-slate-900 text-white", idleCls: "bg-slate-100 text-slate-700 hover:bg-slate-200" },
+            { id: "COMPRA", label: "🔥 Compra real", activeCls: "bg-rose-600 text-white", idleCls: "bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100" },
+            { id: "CONSULTA", label: "💬 Solo consultas", activeCls: "bg-sky-600 text-white", idleCls: "bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100" },
+            { id: "INTERNO", label: "👥 Compañeros · Sin IA", activeCls: "bg-slate-700 text-white", idleCls: "bg-slate-100 text-slate-600 hover:bg-slate-200" },
+          ] as const
+        ).map((item) => {
+          const active = intentFilter === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setIntentFilter(item.id)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition ${
+                active ? item.activeCls : item.idleCls
+              }`}
+            >
+              <span>{item.label}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-extrabold ${
+                  active ? "bg-white/25 text-white" : "bg-white/80 text-slate-700"
+                }`}
+              >
+                {intentCounts[item.id]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* 2-pane Inbox */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[70vh] min-h-[520px]">
         {/* Left conversation list */}
@@ -941,15 +1008,29 @@ export default function BandejaPage() {
                     <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
                       {c.client.contactType === "PROVEEDOR" ? "PROVEEDOR · SIN IA" : "COMPAÑERO · SIN IA"}
                     </span>
-                  ) : c.channel === "WHATSAPP" ? (
-                    <span
-                      className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
-                        c.aiEnabled ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"
-                      }`}
-                    >
-                      {c.aiEnabled ? "BOT" : "AGENTE"}
-                    </span>
-                  ) : null}
+                  ) : (
+                    <>
+                      <span
+                        className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                          getIntentCategory(c) === "COMPRA"
+                            ? "bg-rose-100 text-rose-800"
+                            : "bg-sky-100 text-sky-800"
+                        }`}
+                        title={`Puntaje IA: ${c.client?.qualificationScore || 0}/100 (${c.client?.qualificationStatus || "CONSULTA"})`}
+                      >
+                        {getIntentCategory(c) === "COMPRA" ? "🔥 COMPRA" : "💬 CONSULTA"}
+                      </span>
+                      {(c.channel === "WHATSAPP" || c.channel === "FACEBOOK" || c.channel === "INSTAGRAM") && (
+                        <span
+                          className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                            c.aiEnabled ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {c.aiEnabled ? "BOT" : "AGENTE"}
+                        </span>
+                      )}
+                    </>
+                  )}
                   {c.unreadCount > 0 && (
                     <span className="ml-auto bg-[#0070C0] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                       {c.unreadCount}
@@ -988,23 +1069,37 @@ export default function BandejaPage() {
                         👥 {activeConv.client.contactType === "PROVEEDOR" ? "PROVEEDOR · SIN IA" : "COMPAÑERO / AGENTE · SIN IA"}
                       </span>
                     ) : (
-                      <span
-                        className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                          activeConv.aiEnabled
-                            ? "bg-purple-100 text-purple-800"
-                            : "bg-emerald-100 text-emerald-800"
-                        }`}
-                      >
-                        {activeConv.aiEnabled ? (
-                          <>
-                            <Bot className="w-3 h-3" /> BOT ACTIVO
-                          </>
-                        ) : (
-                          <>
-                            <UserCheck className="w-3 h-3" /> AGENTE
-                          </>
-                        )}
-                      </span>
+                      <>
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                            getIntentCategory(activeConv) === "COMPRA"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-sky-100 text-sky-800"
+                          }`}
+                          title={`Puntaje IA: ${activeConv.client?.qualificationScore || 0}/100`}
+                        >
+                          {getIntentCategory(activeConv) === "COMPRA"
+                            ? `🔥 COMPRA REAL (${activeConv.client?.qualificationScore || 0}%)`
+                            : "💬 CONSULTA"}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                            activeConv.aiEnabled
+                              ? "bg-purple-100 text-purple-800"
+                              : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {activeConv.aiEnabled ? (
+                            <>
+                              <Bot className="w-3 h-3" /> BOT ACTIVO
+                            </>
+                          ) : (
+                            <>
+                              <UserCheck className="w-3 h-3" /> AGENTE
+                            </>
+                          )}
+                        </span>
+                      </>
                     )}
                     {activeConv.client?.stage && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-[#0070C0]">

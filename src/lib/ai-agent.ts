@@ -367,22 +367,35 @@ export async function qualifyLeadAndNotifySeller(params: {
     return { score: 0, qualificationStatus: "FRIO", signals: ["Solicitó baja (opt-out respetado)"], alertCreated: null };
   }
 
-  const signals: string[] = [];
-  let score = 20;
+  const existingClient = await prisma.client.findUnique({
+    where: { id: params.clientId },
+    select: { qualificationScore: true, qualificationStatus: true, contactType: true },
+  });
+  if (existingClient && existingClient.contactType !== "CLIENTE") {
+    return {
+      score: 0,
+      qualificationStatus: "FRIO",
+      signals: [],
+      alertCreated: null,
+    };
+  }
 
-  if (/\b\d{1,4}\b/.test(lower)) {
+  const signals: string[] = [];
+  let score = 15;
+
+  if (/\b\d{1,4}\b/.test(lower) && !/^(hola|buenas|ok|si|no|\d{8})$/.test(lower.trim())) {
     score += 20;
     signals.push("Indicó cantidades específicas");
   }
-  if (/(cotiz|proforma|factura|presupuesto|precio)/i.test(lower)) {
+  if (/(cotiz|proforma|factura|presupuesto|precio|cu[aá]nto vale|cu[aá]nto cuesta|cu[aá]nto ser[ií]a)/i.test(lower)) {
     score += 20;
-    signals.push("Solicita cotización / proforma");
+    signals.push("Solicita precio / cotización / proforma");
   }
-  if (/(comprar|hacer el pedido|confirm|aprob|lo quiero|vamos con|proced|adelanto|sinpe|cuenta|iban|pagar|transferencia|urgente|para hoy|esta semana)/i.test(lower)) {
-    score += 35;
-    signals.push("Intención directa de compra / pago / cierre");
+  if (/(comprar|ordenar|reservar|apartar|agendar cita|hacer el pedido|confirm|aprob|lo quiero|me lo llevo|me interesa llevar|vamos con|proced|adelanto|sinpe|n[uú]mero de cuenta|cuenta|iban|pagar|como pago|c[oó]mo pago|donde deposito|link de pago|transferencia|tarjeta|efectivo|urgente|para hoy|esta semana)/i.test(lower)) {
+    score += 40;
+    signals.push("Intención directa de compra / reserva / pago");
   }
-  if (/(talla|bordado|logo|color|entrega|env[ií]o|san carlos|alajuela)/i.test(lower)) {
+  if (/(talla|bordado|logo|color|entrega|env[ií]o|sucursal|san carlos|alajuela|heredia|san jos[eé]|cartago|puntarenas|guanacaste|lim[oó]n)/i.test(lower)) {
     score += 15;
     signals.push("Detalló especificaciones técnicas o entrega");
   }
@@ -391,29 +404,44 @@ export async function qualifyLeadAndNotifySeller(params: {
     signals.push("Envió nota de voz (alto interés)");
   }
 
+  // General inquiry damping: if message is ONLY asking hours/location/info with zero buying signals
+  const isPureInquiry =
+    signals.length === 0 &&
+    /(horario|abren|cierran|ubicaci[oó]n|d[oó]nde quedan|direcci[oó]n|solo consult|informaci[oó]n|info|hola|buenas|gracias)/i.test(
+      lower
+    );
+  if (isPureInquiry) {
+    score = 10;
+  }
+
   score = Math.min(100, score);
 
+  // Preserve previous higher buying intent if current message is a brief follow-up ("ok", "gracias", etc.)
+  const prevScore = existingClient?.qualificationScore || 0;
+  const effectiveScore =
+    signals.length === 0 && prevScore >= 50 ? prevScore : Math.max(score, prevScore >= 75 ? prevScore : 0);
+
   const qualificationStatus =
-    score >= 75
+    effectiveScore >= 75
       ? "LISTO_PARA_COMPRAR"
-      : score >= 50
+      : effectiveScore >= 50
       ? "CALIENTE"
-      : score >= 30
+      : effectiveScore >= 30
       ? "TIBIO"
       : "FRIO";
 
   const client = await prisma.client.update({
     where: { id: params.clientId },
     data: {
-      qualificationScore: score,
+      qualificationScore: effectiveScore,
       qualificationStatus,
     },
   });
 
   let alertCreated = null;
-  if (qualificationStatus === "LISTO_PARA_COMPRAR" || score >= 70) {
-    const suggestedNextStep = /(sinpe|pagar|confirm|aprob|pedido)/i.test(lower)
-      ? "Enviar datos SINPE/IBAN y confirmar fecha de entrega inmediata."
+  if (signals.length > 0 && (qualificationStatus === "LISTO_PARA_COMPRAR" || score >= 70)) {
+    const suggestedNextStep = /(sinpe|pagar|confirm|aprob|pedido|reservar|transferencia|deposito)/i.test(lower)
+      ? "Enviar datos SINPE/IBAN o enlace de pago y confirmar entrega inmediata."
       : "Generar y enviar Factura Proforma PDF ahora mismo para cerrar la venta.";
 
     // Pause AI bot automatically on handoff to human seller
@@ -437,11 +465,11 @@ export async function qualifyLeadAndNotifySeller(params: {
         workspaceId: client.workspaceId,
         clientId: client.id,
         conversationId: params.conversationId || "",
-        priority: score >= 80 ? "ALTA" : "MEDIA",
-        title: `🔥 ${client.company} está listo para comprar (${score}/100) — Bot pausado`,
+        priority: effectiveScore >= 80 ? "ALTA" : "MEDIA",
+        title: `🔥 ${client.company} está listo para comprar (${effectiveScore}/100) — Bot pausado`,
         buyingSignals: signals.join(" · "),
         suggestedNextStep,
-        score,
+        score: effectiveScore,
       },
     });
 
@@ -450,25 +478,26 @@ export async function qualifyLeadAndNotifySeller(params: {
         workspaceId: client.workspaceId,
         clientId: client.id,
         type: "IA",
-        title: `Aviso al vendedor: ${client.company} calificado ${qualificationStatus} (${score}%)`,
+        title: `Aviso al vendedor: ${client.company} calificado ${qualificationStatus} (${effectiveScore}%)`,
         description: `${signals.join(" · ")}. Sugerencia: ${suggestedNextStep}`,
         completed: false,
       },
     });
 
-    // Notify seller via corporate SMTP if configured
-    const company = await getCompanySettings();
-    const integrations = await getIntegrationSettings();
+    // Notify seller via corporate SMTP of THAT workspace if configured
+    const company = await getCompanySettings(client.workspaceId);
+    const integrations = await getIntegrationSettings(client.workspaceId);
     if (integrations.smtpHost && integrations.smtpUser && integrations.smtpPass && company.email) {
       await sendCorporateEmail({
+        workspaceId: client.workspaceId,
         to: company.email,
         subject: `🔥 Aviso CRM: ${client.company} está listo para comprar`,
-        text: `El Agente IA calificó a ${client.company} (${client.contactName || "Contacto"}) con ${score}/100.\n\nSeñales detectadas: ${signals.join(", ")}\nMensaje del cliente: "${params.messageBody}"\n\nSiguiente paso sugerido: ${suggestedNextStep}`,
+        text: `El Agente IA calificó a ${client.company} (${client.contactName || "Contacto"}) con ${effectiveScore}/100.\n\nSeñales detectadas: ${signals.join(", ")}\nMensaje del cliente: "${params.messageBody}"\n\nSiguiente paso sugerido: ${suggestedNextStep}`,
       }).catch(() => {});
     }
   }
 
-  return { score, qualificationStatus, signals, alertCreated };
+  return { score: effectiveScore, qualificationStatus, signals, alertCreated };
 }
 
 export async function extractQuoteDraftFromText(messageText: string): Promise<{

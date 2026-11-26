@@ -73,6 +73,7 @@ export async function PATCH(req: NextRequest) {
           ...(i.imapUser !== undefined ? { imapUser: String(i.imapUser) } : {}),
           ...(i.imapPass !== undefined ? { imapPass: String(i.imapPass) } : {}),
           ...(i.metaAccessToken !== undefined ? { metaAccessToken: String(i.metaAccessToken) } : {}),
+          ...(i.metaPageAccessToken !== undefined ? { metaPageAccessToken: String(i.metaPageAccessToken) } : {}),
           ...(i.metaPhoneNumberId !== undefined ? { metaPhoneNumberId: String(i.metaPhoneNumberId) } : {}),
           ...(i.metaWabaId !== undefined ? { metaWabaId: String(i.metaWabaId) } : {}),
           ...(i.metaPageId !== undefined ? { metaPageId: String(i.metaPageId) } : {}),

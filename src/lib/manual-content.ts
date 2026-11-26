@@ -137,6 +137,12 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Buscador visual universal: sube la foto de cualquier artículo (calzado, ropa, gorras, mochilas, balones o accesorios) para identificar el modelo exacto, precio y disponibilidad real por sucursal en elcaminantecr.com/tienda/.",
       },
       {
+        control: "Clasificación IA (🔥 Compra real vs 💬 Solo consultas)",
+        location: "Barra de filtros encima de la lista de chats",
+        purpose:
+          "Separa automáticamente en WhatsApp, Messenger, Instagram y Correo los clientes con intención real de compra (cantidades, cotización, reserva, SINPE/pago) de quienes solo hacen consultas generales (horario, ubicación o info). Permite filtrar en 1 clic solo los compradores calientes.",
+      },
+      {
         control: "Pestañas separadas por canal y correo + «Acomodar conexiones»",
         location: "Debajo del encabezado",
         purpose:

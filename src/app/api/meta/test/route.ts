@@ -1,12 +1,91 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getIntegrationSettings } from "@/lib/prisma";
+import { getIntegrationSettings, prisma } from "@/lib/prisma";
+import { getActiveWorkspaceId } from "@/lib/workspace";
 import { normalizeCRPhone } from "@/lib/format";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const action = body.action || "verify";
-    const cfg = await getIntegrationSettings();
+    const workspaceId = await getActiveWorkspaceId();
+    const cfg = await getIntegrationSettings(workspaceId);
+
+    // 0. Verify Facebook Page + Instagram Business connection (Messenger & IG Direct)
+    if (action === "verify_social") {
+      const token = (cfg.metaPageAccessToken || cfg.metaAccessToken || "").trim();
+      if (!token || (!cfg.metaPageId && !cfg.metaIgAccountId)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "Primero pega tu Facebook Page ID (o Instagram Account ID) y el Token de Página (o Token Permanente) y guarda.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const parts: string[] = [];
+      let discoveredIgId = cfg.metaIgAccountId || "";
+
+      if (cfg.metaPageId) {
+        const res = await fetch(
+          `https://graph.facebook.com/v21.0/${encodeURIComponent(
+            cfg.metaPageId
+          )}?fields=id,name,instagram_business_account{id,username,name}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          return NextResponse.json(
+            { ok: false, error: data?.error?.message || `Error Facebook Page API (${res.status})` },
+            { status: 400 }
+          );
+        }
+        parts.push(`Facebook Page: ${data.name || cfg.metaPageId} (ID ${data.id || cfg.metaPageId})`);
+        if (data.instagram_business_account?.id) {
+          discoveredIgId = String(data.instagram_business_account.id);
+          const igLabel = data.instagram_business_account.username
+            ? `@${data.instagram_business_account.username}`
+            : discoveredIgId;
+          parts.push(`Instagram vinculado: ${igLabel} (ID ${discoveredIgId})`);
+          if (discoveredIgId !== cfg.metaIgAccountId) {
+            await prisma.integrationSettings.update({
+              where: { id: workspaceId },
+              data: { metaIgAccountId: discoveredIgId },
+            });
+          }
+        }
+      } else if (cfg.metaIgAccountId) {
+        const res = await fetch(
+          `https://graph.facebook.com/v21.0/${encodeURIComponent(
+            cfg.metaIgAccountId
+          )}?fields=id,username,name`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          return NextResponse.json(
+            { ok: false, error: data?.error?.message || `Error Instagram API (${res.status})` },
+            { status: 400 }
+          );
+        }
+        parts.push(
+          `Instagram: ${data.username ? `@${data.username}` : data.name || cfg.metaIgAccountId}`
+        );
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message: `Conexión Social exitosa · ${parts.join(" · ")}`,
+        metaIgAccountId: discoveredIgId,
+      });
+    }
 
     if (!cfg.metaAccessToken || !cfg.metaPhoneNumberId) {
       return NextResponse.json(

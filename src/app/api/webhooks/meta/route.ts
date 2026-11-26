@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getIntegrationSettings, prisma } from "@/lib/prisma";
-import { fetchMetaLeadDetails, verifyMetaWebhookSignature } from "@/lib/meta";
+import {
+  fetchMetaLeadDetails,
+  fetchMetaSocialProfile,
+  sendMetaSocialMessage,
+  sendWhatsAppCloudMessage,
+  verifyMetaWebhookSignature,
+} from "@/lib/meta";
 import { normalizeCRPhone } from "@/lib/format";
 import { runTriggerAutomations } from "@/lib/automations";
 import { downloadAndTranscribeMetaAudio } from "@/lib/audio";
-import { qualifyLeadAndNotifySeller } from "@/lib/ai-agent";
+import { generateAiReply, qualifyLeadAndNotifySeller } from "@/lib/ai-agent";
 import { downloadMetaWhatsAppImage, identifyShoeAndFetchLiveStock } from "@/lib/vision-stock";
-import { sendWhatsAppCloudMessage } from "@/lib/meta";
 import {
   findOrCreateWhatsAppClient,
   findOrCreateWhatsAppConversation,
@@ -385,39 +390,111 @@ export async function POST(req: NextRequest) {
         });
         if (socialMatch) msgWsId = socialMatch.id;
       }
+      const socialCfg =
+        messaging.length > 0 ? await getIntegrationSettings(msgWsId) : null;
+      const socialToken =
+        (socialCfg?.metaPageAccessToken || socialCfg?.metaAccessToken || "").trim();
+
       for (const ev of messaging) {
-        if (!ev.message?.text) continue;
-        const senderId = String(ev.sender?.id || "");
-        const channel = payload.object === "instagram" ? "INSTAGRAM" : "FACEBOOK";
-        const bodyText = String(ev.message.text);
+        // Skip echo messages (sent by the Page/IG itself) and non-message events
+        if (ev.message?.is_echo) continue;
+        if (!ev.message && !ev.postback) continue;
+
+        const senderId = String(ev.sender?.id || "").trim();
+        if (!senderId) continue;
+
+        // Deduplicate Meta retries by message mid
+        const externalMid = String(ev.message?.mid || "");
+        if (externalMid) {
+          const dupSocial = await prisma.message.findFirst({
+            where: { externalMessageId: externalMid },
+            select: { id: true },
+          });
+          if (dupSocial) continue;
+        }
+
+        const channel: "INSTAGRAM" | "FACEBOOK" =
+          payload.object === "instagram" ? "INSTAGRAM" : "FACEBOOK";
+
+        let bodyText = String(ev.message?.text || ev.postback?.title || "").trim();
+        if (!bodyText && Array.isArray(ev.message?.attachments) && ev.message.attachments.length > 0) {
+          const attType = String(ev.message.attachments[0]?.type || "archivo");
+          const mapType: Record<string, string> = {
+            image: "📷 Imagen recibida",
+            audio: "🎤 Audio recibido",
+            video: "🎥 Video recibido",
+            file: "📄 Archivo recibido",
+            ig_reel: "🎬 Reel compartido",
+            share: "🔗 Publicación compartida",
+            story_mention: "📲 Te mencionó en una historia",
+          };
+          bodyText = mapType[attType] || `[Archivo ${attType}]`;
+        }
+        if (!bodyText) continue;
 
         let client = await prisma.client.findFirst({
           where: { workspaceId: msgWsId, code: senderId },
         });
+
+        const needsName =
+          !client ||
+          client.contactName.startsWith("Usuario ") ||
+          client.company.startsWith("FACEBOOK ") ||
+          client.company.startsWith("INSTAGRAM ");
+
+        const profile = needsName
+          ? await fetchMetaSocialProfile(senderId, channel, socialToken)
+          : null;
+
+        const displayName =
+          profile?.name ||
+          (channel === "INSTAGRAM" ? `Instagram ${senderId.slice(-4)}` : `Messenger ${senderId.slice(-4)}`);
+
         if (!client) {
           client = await prisma.client.create({
             data: {
               workspaceId: msgWsId,
               code: senderId,
-              company: `${channel} ${senderId.slice(-4)}`,
-              contactName: `Usuario ${channel}`,
+              company: displayName,
+              contactName: profile?.username ? `${displayName} (@${profile.username})` : displayName,
               stage: "NUEVO",
               source: channel,
+            },
+          });
+        } else if (profile?.name) {
+          client = await prisma.client.update({
+            where: { id: client.id },
+            data: {
+              company: profile.name,
+              contactName: profile.username ? `${profile.name} (@${profile.username})` : profile.name,
             },
           });
         }
 
         let conv = await prisma.conversation.findFirst({
           where: { workspaceId: msgWsId, channel, externalId: senderId },
+          orderBy: { createdAt: "asc" },
         });
         if (!conv) {
           conv = await prisma.conversation.create({
             data: {
+              workspaceId: msgWsId,
               channel,
               externalId: senderId,
               subject: client.company,
               clientId: client.id,
               unreadCount: 1,
+              lastMessageAt: new Date(),
+              lastMessagePreview: bodyText.slice(0, 140),
+            },
+          });
+        } else {
+          conv = await prisma.conversation.update({
+            where: { id: conv.id },
+            data: {
+              subject: client.company,
+              unreadCount: { increment: 1 },
+              lastMessageAt: new Date(),
               lastMessagePreview: bodyText.slice(0, 140),
             },
           });
@@ -427,13 +504,98 @@ export async function POST(req: NextRequest) {
           data: {
             conversationId: conv.id,
             direction: "INBOUND",
-            senderName: client.contactName,
+            senderName: client.contactName || client.company,
             senderRole: "CLIENT",
             body: bodyText,
-            externalMessageId: ev.message.mid || "",
+            externalMessageId: externalMid,
             status: "DELIVERED",
           },
         });
+
+        // Auto-stop any active 1-7-90 follow-up sequence on inbound reply
+        await prisma.sequenceEnrollment
+          .updateMany({
+            where: { workspaceId: msgWsId, clientId: client.id, status: "ACTIVA" },
+            data: { status: "DETENIDA_RESPUESTA" },
+          })
+          .catch(() => {});
+
+        // 1. Exclude coworkers / suppliers (Sin IA)
+        if (client.contactType !== "CLIENTE") {
+          if (conv.aiEnabled) {
+            await prisma.conversation.update({
+              where: { id: conv.id },
+              data: { aiEnabled: false },
+            });
+          }
+          continue;
+        }
+
+        // 2. Qualify purchase intent vs general inquiry & alert seller if ready to buy
+        await qualifyLeadAndNotifySeller({
+          clientId: client.id,
+          conversationId: conv.id,
+          messageBody: bodyText,
+          isAudio: false,
+        });
+
+        // Reload conv in case qualifyLeadAndNotifySeller paused AI for hot lead
+        const latestConv =
+          (await prisma.conversation.findUnique({
+            where: { id: conv.id },
+            include: { messages: { orderBy: { createdAt: "asc" }, take: 10 } },
+          })) || null;
+
+        const skipAiForExisting =
+          Boolean(socialCfg?.aiOnlyNewClients) && client.stage !== "NUEVO";
+
+        if (
+          latestConv &&
+          latestConv.aiEnabled &&
+          !socialCfg?.aiGlobalPaused &&
+          !skipAiForExisting
+        ) {
+          const ai = await generateAiReply({
+            workspaceId: msgWsId,
+            userMessage: bodyText,
+            channel,
+            clientName: client.contactName || client.company,
+            clientCompany: client.company,
+            conversationHistory: latestConv.messages.map((m) => ({
+              role: m.direction === "INBOUND" ? "Cliente" : "Asistente",
+              body: m.body,
+            })),
+          });
+          const sendRes = await sendMetaSocialMessage({
+            workspaceId: msgWsId,
+            channel,
+            recipientId: senderId,
+            text: ai.reply,
+          });
+          await prisma.message.create({
+            data: {
+              conversationId: conv.id,
+              direction: "OUTBOUND",
+              senderName: "Agente IA",
+              senderRole: "AI",
+              body: ai.reply,
+              externalMessageId: sendRes.externalMessageId || "",
+              status: sendRes.simulated ? "SIMULATED" : sendRes.ok ? "SENT" : "FAILED",
+            },
+          });
+          await prisma.conversation.update({
+            where: { id: conv.id },
+            data: {
+              lastMessageAt: new Date(),
+              lastMessagePreview: ai.reply.slice(0, 140),
+            },
+          });
+        }
+
+        // 3. Silent CRM Autopilot: organizes Kanban stage, tags, summary & Agenda tasks automatically!
+        await syncCrmFromConversation(conv.id, msgWsId).catch((e) =>
+          console.error("Silent CRM autopilot social error:", e)
+        );
       }
     }
 

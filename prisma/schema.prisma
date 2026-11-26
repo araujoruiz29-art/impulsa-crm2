@@ -67,6 +67,7 @@ model IntegrationSettings {
   imapPass             String    @default("")
   imapLastSyncAt       DateTime?
   metaAccessToken      String    @default("")
+  metaPageAccessToken  String    @default("")
   metaPhoneNumberId    String    @default("")
   metaWabaId           String    @default("")
   metaPageId           String    @default("")

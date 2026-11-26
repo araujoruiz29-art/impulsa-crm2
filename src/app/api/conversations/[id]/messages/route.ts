@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCompanySettings, prisma } from "@/lib/prisma";
-import { sendWhatsAppCloudMessage } from "@/lib/meta";
+import { sendMetaSocialMessage, sendWhatsAppCloudMessage } from "@/lib/meta";
 import { sendCorporateEmail } from "@/lib/email";
 import { syncCrmFromConversation } from "@/lib/crm-autopilot";
 
@@ -49,6 +49,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       status = wa.simulated ? "SIMULATED" : wa.ok ? "SENT" : "FAILED";
       externalMessageId = wa.externalMessageId || "";
       deliveryInfo = wa.info || wa.error || "";
+    } else if (conv.channel === "FACEBOOK" || conv.channel === "INSTAGRAM") {
+      const social = await sendMetaSocialMessage({
+        workspaceId: conv.workspaceId,
+        channel: conv.channel,
+        recipientId: conv.externalId,
+        text,
+      });
+      status = social.simulated ? "SIMULATED" : social.ok ? "SENT" : "FAILED";
+      externalMessageId = social.externalMessageId || "";
+      deliveryInfo = social.info || social.error || "";
     } else if (conv.channel === "EMAIL") {
       const mail = await sendCorporateEmail({
         to: conv.externalId,

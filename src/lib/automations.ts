@@ -1,7 +1,7 @@
 import { getIntegrationSettings, prisma } from "./prisma";
 import { formatMoney } from "./format";
 import { generateAiReply } from "./ai-agent";
-import { sendWhatsAppCloudMessage } from "./meta";
+import { sendMetaSocialMessage, sendWhatsAppCloudMessage } from "./meta";
 import { sendCorporateEmail } from "./email";
 
 export interface TriggerContext {
@@ -92,6 +92,17 @@ export async function runTriggerAutomations(trigger: string, ctx: TriggerContext
               text: ai.reply,
             });
             status = waRes.simulated ? "SIMULATED" : waRes.ok ? "SENT" : "FAILED";
+          } else if (
+            (conv.channel === "FACEBOOK" || conv.channel === "INSTAGRAM") &&
+            conv.externalId
+          ) {
+            const socialRes = await sendMetaSocialMessage({
+              workspaceId,
+              channel: conv.channel,
+              recipientId: conv.externalId,
+              text: ai.reply,
+            });
+            status = socialRes.simulated ? "SIMULATED" : socialRes.ok ? "SENT" : "FAILED";
           }
 
           await prisma.message.create({

@@ -161,7 +161,10 @@ export default function ConfiguracionPage() {
     ]);
   };
 
-  const testMetaApi = async (action: "verify" | "send_test", mode: "template" | "text" = "template") => {
+  const testMetaApi = async (
+    action: "verify" | "send_test" | "verify_social",
+    mode: "template" | "text" = "template"
+  ) => {
     setTesting(true);
     setStatusMsg("");
     try {
@@ -176,6 +179,9 @@ export default function ConfiguracionPage() {
         body: JSON.stringify({ action, to: testWaPhone, mode }),
       });
       const data = await res.json();
+      if (data.ok && data.metaIgAccountId) {
+        setIntegrations((prev) => ({ ...prev, metaIgAccountId: data.metaIgAccountId }));
+      }
       setStatusMsg(data.ok ? `✅ ${data.message}` : `❌ ${data.error}`);
     } finally {
       setTesting(false);
@@ -727,21 +733,78 @@ export default function ConfiguracionPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">URL Pública HTTPS (Cloudflare Tunnel / Dominio)</label>
+                <label className="text-xs font-semibold text-slate-600">URL Pública HTTPS (Dominio del CRM)</label>
                 <input
                   value={String(integrations.metaPublicWebhookUrl || "")}
                   onChange={(e) => setIntegrations({ ...integrations, metaPublicWebhookUrl: e.target.value })}
-                  placeholder="https://crm.elcaminantecr.com"
+                  placeholder="https://impulsa-crm2.vercel.app"
                   className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-600">Meta Ad Account ID / Page ID (para Lead Ads)</label>
+                <label className="text-xs font-semibold text-slate-600">Meta Ad Account ID (Opcional · Lead Ads)</label>
                 <input
-                  value={String(integrations.metaPageId || "")}
-                  onChange={(e) => setIntegrations({ ...integrations, metaPageId: e.target.value })}
+                  value={String(integrations.metaAdAccountId || "")}
+                  onChange={(e) => setIntegrations({ ...integrations, metaAdAccountId: e.target.value })}
+                  placeholder="act_123456789"
                   className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
                 />
+              </div>
+            </div>
+
+            {/* Dedicated Messenger & Instagram Direct section */}
+            <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-[#22115d]">
+                    Facebook Messenger e Instagram Direct (Respuestas 2 vías + IA + Kanban)
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Conecta la Página de Facebook y el Instagram Profesional de esta empresa para recibir, responder, clasificar Compra vs Consulta y acomodar clientes en Ventas Kanban automáticamente.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={testing}
+                  onClick={() => testMetaApi("verify_social")}
+                  className="px-3.5 py-2 bg-[#22115d] hover:bg-indigo-900 text-white rounded-xl text-xs font-bold shrink-0"
+                >
+                  Verificar Messenger e Instagram
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Facebook Page ID (Messenger y Lead Ads)</label>
+                  <input
+                    value={String(integrations.metaPageId || "")}
+                    onChange={(e) => setIntegrations({ ...integrations, metaPageId: e.target.value })}
+                    placeholder="109876543210987"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-indigo-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">
+                    Instagram Business Account ID (se detecta solo al verificar)
+                  </label>
+                  <input
+                    value={String(integrations.metaIgAccountId || "")}
+                    onChange={(e) => setIntegrations({ ...integrations, metaIgAccountId: e.target.value })}
+                    placeholder="17841400..."
+                    className="w-full mt-1 px-3 py-2 bg-white border border-indigo-200 rounded-xl"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Token de Página para Messenger / Instagram (opcional si tu Token Permanente ya tiene asignada la Página)
+                  </label>
+                  <input
+                    type="password"
+                    value={String(integrations.metaPageAccessToken || "")}
+                    onChange={(e) => setIntegrations({ ...integrations, metaPageAccessToken: e.target.value })}
+                    placeholder="EAAG... (Page Access Token con pages_messaging e instagram_manage_messages)"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-indigo-200 rounded-xl"
+                  />
+                </div>
               </div>
             </div>
           </div>
