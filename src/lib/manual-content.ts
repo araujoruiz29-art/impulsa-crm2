@@ -143,6 +143,12 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Separa automáticamente en WhatsApp, Messenger, Instagram y Correo los clientes con intención real de compra (cantidades, cotización, reserva, SINPE/pago) de quienes solo hacen consultas generales (horario, ubicación o info). Permite filtrar en 1 clic solo los compradores calientes.",
       },
       {
+        control: "Messenger e Instagram 2 vías + Auto-respuesta a Comentarios",
+        location: "Pestañas Messenger / Instagram y Webhook oficial",
+        purpose:
+          "Recibe y responde mensajes directos en 2 vías con el nombre real del usuario, acomoda el Kanban con IA y responde automáticamente comentarios de «Precio», «Ubicación» o «Quiero» en publicaciones/Reels enviando un mensaje privado (DM) y creando el lead en el CRM.",
+      },
+      {
         control: "Pestañas separadas por canal y correo + «Acomodar conexiones»",
         location: "Debajo del encabezado",
         purpose:
@@ -463,13 +469,19 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     route: "/conocimiento",
     group: "IA Y SISTEMA",
     summary:
-      "Aquí guardas la información oficial de tu empresa (horarios regulares, Horario Navideño, garantías, políticas de bordado, cuentas, direcciones y tiempos de entrega). Todo documento en estado «Activo en IA» es leído automáticamente por el bot antes de contestar a un cliente.",
-    tip: "Cuando cambie tu horario de temporada (por ejemplo al pasar de Horario Navideño a horario normal), solo desactiva o edita el documento aquí y el Agente de IA se actualiza al instante.",
+      "Aquí entrenas el cerebro de tu Agente de IA con el Cuestionario Guiado de 7 bloques (tiendas, horarios, apartados, pagos, Tasa Cero, créditos, envíos, cambios, garantías, factura electrónica y proveedores) o subiendo documentos libres (Horario Navideño, listas de precios, políticas). Todo documento en estado «Activo en IA» es leído automáticamente por el bot antes de contestar.",
+    tip: "Usa la pestaña «1. Cuestionario Guiado IA» para entrenar una empresa nueva en 5 minutos; si cambia una política o horario, solo edítalo ahí mismo sin duplicar documentos.",
     buttons: [
       {
-        control: "Subir archivo (.txt, .md, .csv, .json)",
-        location: "Formulario izquierdo (arriba)",
-        purpose: "Carga automáticamente el contenido de un documento desde tu PC.",
+        control: "Pestaña 1 · Cuestionario Guiado IA (7 secciones)",
+        location: "Selector superior izquierdo",
+        purpose:
+          "Formulario completo guiado (Tiendas/Horarios, Apartados/Encargos, Pagos/Créditos, Envíos/7 datos, Cambios, Garantías y Precios/Factura Electrónica/Proveedores). Al guardar entrena al bot al instante.",
+      },
+      {
+        control: "Pestaña 2 · Subir archivo (.txt, .md, .csv, .json)",
+        location: "Segunda pestaña (formulario izquierdo)",
+        purpose: "Carga automáticamente documentos adicionales (como horarios de temporada) desde tu PC.",
       },
       {
         control: "+ Guardar en Base de Conocimiento",
@@ -477,15 +489,10 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         purpose: "Guarda el documento y lo activa de inmediato para el Agente de IA.",
       },
       {
-        control: "Activo en IA / Inactivo",
+        control: "Activo en IA / Inactivo, Editar (✏️) y Eliminar (🗑️)",
         location: "En cada documento cargado",
         purpose:
-          "Activa o desactiva ese documento sin borrarlo (ideal para horarios temporales o promociones).",
-      },
-      {
-        control: "Eliminar (🗑️)",
-        location: "En cada documento cargado",
-        purpose: "Borra definitivamente el documento de la base de conocimiento.",
+          "Activa, desactiva, edita o borra cualquier documento de la base de conocimiento.",
       },
     ],
   },
@@ -551,22 +558,28 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         purpose:
           "Crea en 1 clic la secuencia de 9 pasos (Días 1, 3, 4, 5, 7 + Nutrición 15, 30, 60 y 90 días), permite editar cada paso, asignar plantillas Meta, inscribir clientes o etapas completas y ejecutar envíos pendientes.",
       },
+      {
+        control: "Pestaña 3 · Anuncios FB & IG (Meta Ads + Estudio IA de Guiones)",
+        location: "Selector superior",
+        purpose:
+          "Muestra tus campañas de Facebook e Instagram con presupuesto, gasto 30d, alcance, leads y Costo/Resultado en ₡, permite Pausar/Activar anuncios en 1 clic, mide el retorno real en tu CRM, incluye el Estudio IA de Guiones para grabar Reels en tienda (sin terceros), el Lanzador Directo de Campañas Meta Ads y el Generador IA de Anuncios.",
+      },
     ],
   },
   {
     id: "configuracion",
     number: "12",
-    title: "Conexiones y Empresa (5 Pestañas de Configuración)",
+    title: "Conexiones y Empresa (7 Pestañas de Configuración y Control SaaS)",
     route: "/configuracion",
     group: "IA Y SISTEMA",
     summary:
-      "Centro técnico y administrativo del CRM. Permite personalizar los datos legales de la proforma, gestionar múltiples cuentas de correo, configurar WhatsApp Cloud API, ajustar el alcance y personalidad de la IA y respaldar o limpiar datos.",
+      "Centro técnico y administrativo del CRM. Permite subir tu logotipo propio, configurar correos, WhatsApp/Messenger/Instagram/Meta Ads, ajustar la IA, gestionar vendedores, activar respaldos semanales automáticos y (para SuperAdmin) controlar todas las compañías.",
     buttons: [
       {
-        control: "Pestaña 1 · Empresa y Proforma",
+        control: "Pestaña 1 · Empresa y Proforma (+ Subir Logo)",
         location: "Primera pestaña",
         purpose:
-          "Edita nombre comercial, razón social, cédula jurídica, dirección, teléfonos, SINPE Móvil, consecutivo de proforma, color/logo, frase del pie de página y cuentas bancarias del PDF.",
+          "Sube tu propio logotipo (PNG/JPG/WebP) para que aparezca en las Proformas PDF, y edita nombre comercial, razón social, cédula jurídica, dirección, teléfonos, SINPE Móvil, consecutivo, color, pie de página y cuentas bancarias.",
       },
       {
         control: "Pestaña 2 · Correo SMTP / IMAP",
@@ -575,10 +588,10 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Administra múltiples correos corporativos (ventas@ y uniformes@). Incluye botones para Agregar cuenta, Guardar, Probar conexión SMTP/IMAP, Sincronizar bandeja y marcar cuenta Predeterminada.",
       },
       {
-        control: "Pestaña 3 · Meta Cloud API & WhatsApp",
+        control: "Pestaña 3 · Meta Cloud API, Messenger, Instagram y Meta Ads",
         location: "Tercera pestaña",
         purpose:
-          "Muestra la URL del Webhook (con botón Copiar), guarda el Token Permanente, Phone Number ID y WABA ID. Incluye «Verificar Conexión Meta», «Enviar WhatsApp Prueba» y «Enviar Texto Libre».",
+          "URL del Webhook universal (con Copiar), Token Permanente, Phone Number ID, WABA ID, Meta Ad Account ID (act_...) y bloque dedicado de Facebook Messenger e Instagram Direct (Page ID, IG ID auto-detectado, Token de Página y botón «Verificar Messenger e Instagram»).",
       },
       {
         control: "Pestaña 4 · Agente de IA",
@@ -587,10 +600,22 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Controla el interruptor global («IA Automática 24/7» vs «Modo Manual Total»), el Alcance de la IA («Solo Clientes Nuevos» vs «Todos los Clientes»), API Key de Gemini, botón «Probar Conexión IA», personalidad del bot y plantillas editables para búsquedas por foto.",
       },
       {
-        control: "Pestaña 5 · Respaldos y Nube",
+        control: "Pestaña 5 · Equipo y Vendedores",
         location: "Quinta pestaña",
         purpose:
-          "«Descargar Migración Completa (JSON)» guarda copia total de seguridad. «Subir archivo de respaldo JSON» restaura datos. El bloque de Limpieza permite borrar chats de prueba, vaciar catálogo o limpiar el tablero Kanban de pruebas de forma segura.",
+          "Crea usuarios individuales de acceso para tus vendedores (aislados dentro de tu empresa), permite Pausar acceso, Cambiar contraseña o Eliminar vendedores.",
+      },
+      {
+        control: "Pestaña 6 · Respaldos y Nube (+ Respaldo Semanal Automático)",
+        location: "Sexta pestaña",
+        purpose:
+          "Todos los domingos 2:00 AM (CR) envía automáticamente un respaldo completo (.json) por correo (incluye clientes, chats, proformas, campañas, ciclo 1-7-90, catálogo y usuarios). Incluye «Enviar respaldo por correo ahora», descarga/restauración aislada por empresa y limpieza segura de datos de prueba.",
+      },
+      {
+        control: "Pestaña 7 · Admin Compañías (SaaS · Solo SuperAdmin)",
+        location: "Séptima pestaña (exclusiva SuperAdmin)",
+        purpose:
+          "Lista todas las compañías registradas con métricas en vivo (clientes, chats, proformas, vendedores, conexiones), selector de plan (Básico/Pro/Enterprise), botón «Entrar al espacio», restablecer clave del dueño y «Suspender / Activar» empresa por suscripción.",
       },
       {
         control: "Guardar Configuración",

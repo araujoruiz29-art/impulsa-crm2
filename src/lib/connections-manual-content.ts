@@ -224,27 +224,29 @@ export const CONNECTION_GUIDES: ConnectionGuideSection[] = [
         ],
       },
       {
-        title: "Activar Webhooks de Instagram en Meta Developers",
+        title: "Activar Webhooks de Instagram y Auto-Respuesta a Comentarios (FB e IG)",
         link: { label: "Abrir Meta for Developers", url: "https://developers.facebook.com/apps" },
         details: [
           "En tu App de Meta → Messenger (o producto Instagram) → «Configuración de Instagram» → vincula tu cuenta de Instagram.",
-          "En Webhooks → selecciona objeto «Instagram» → pega la URL https://impulsa-crm2.vercel.app/api/webhooks/meta y tu Verify Token.",
-          "Suscribe el campo «messages» (y agrega los permisos instagram_basic e instagram_manage_messages al token).",
+          "En Webhooks → objeto «Instagram» → pega https://impulsa-crm2.vercel.app/api/webhooks/meta y tu Verify Token, y suscribe los campos «messages» y «comments».",
+          "En Webhooks → objeto «Page» → suscribe también el campo «feed» para que la IA responda automáticamente los comentarios de «Precio», «Ubicación» o «Quiero» enviando un mensaje privado (DM) al instante.",
         ],
       },
       {
-        title: "Conectar Formularios de Meta Lead Ads (Opcional)",
+        title: "Conectar Meta Ads (Anuncios FB/IG) y Formularios Lead Ads",
+        link: { label: "Cuentas Publicitarias en Meta Business", url: "https://business.facebook.com/settings/ad-accounts" },
         details: [
-          "En Meta Developers → Webhooks → selecciona objeto «Page» (Página) → suscribe el campo «leadgen».",
-          "Agrega el permiso «leads_retrieval» al Usuario del Sistema «Impulsa CRM».",
-          "Cada vez que alguien llene un formulario en tus anuncios de Facebook o Instagram, el CRM creará automáticamente el contacto en Contactos y abrirá su conversación.",
+          "En Meta Business → Cuentas publicitarias → copia tu ID de Cuenta Publicitaria (formato act_123456789) y asígnala al Usuario del Sistema «Impulsa CRM» con Control Total.",
+          "Agrega los permisos ads_read, ads_management y leads_retrieval al token permanente.",
+          "Pega el ID en impulsa CRM → Conexiones y empresa → Meta Cloud API → campo «Meta Ad Account ID» y guarda. Desde Campañas → «3. Anuncios FB & IG» podrás ver gasto/costo por resultado en ₡, pausar/activar anuncios y crear campañas nuevas sin terceros.",
         ],
       },
     ],
     crmFields: [
-      { field: "Meta Ad Account ID / Page ID", whereToFind: "ID de tu Página de Facebook vinculada a Instagram y Lead Ads" },
+      { field: "Facebook Page ID & Instagram Business Account ID", whereToFind: "Meta Business → Páginas (IG ID se detecta al pulsar «Verificar Messenger e Instagram»)" },
+      { field: "Meta Ad Account ID", whereToFind: "Meta Business → Cuentas publicitarias (ej. act_808438614331546)" },
       { field: "Webhook URL (misma para todos)", whereToFind: "https://impulsa-crm2.vercel.app/api/webhooks/meta" },
-      { field: "Permisos de Token", whereToFind: "instagram_basic, instagram_manage_messages, leads_retrieval" },
+      { field: "Permisos de Token", whereToFind: "pages_messaging, instagram_basic, instagram_manage_messages, ads_read, ads_management, leads_retrieval" },
     ],
   },
   {
