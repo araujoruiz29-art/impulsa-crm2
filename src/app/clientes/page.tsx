@@ -28,6 +28,7 @@ interface ClientItem {
   email: string;
   address: string;
   stage: string;
+  contactType?: string;
   source: string;
   tags: string;
   estimatedValue: number;
@@ -50,6 +51,7 @@ const EMPTY_FORM = {
   email: "",
   address: "",
   stage: "NUEVO",
+  contactType: "CLIENTE",
   source: "WHATSAPP",
   tags: "",
   estimatedValue: 0,
@@ -63,6 +65,7 @@ export default function ClientesPage() {
   const [q, setQ] = useState("");
   const [stageFilter, setStageFilter] = useState("ALL");
   const [sourceFilter, setSourceFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -79,6 +82,7 @@ export default function ClientesPage() {
     if (q) params.set("q", q);
     if (stageFilter !== "ALL") params.set("stage", stageFilter);
     if (sourceFilter !== "ALL") params.set("source", sourceFilter);
+    if (typeFilter !== "ALL") params.set("contactType", typeFilter);
     const res = await fetch(`/api/clients?${params.toString()}`);
     const data = await res.json();
     setClients(data.clients || []);
@@ -88,7 +92,7 @@ export default function ClientesPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageFilter, sourceFilter]);
+  }, [stageFilter, sourceFilter, typeFilter]);
 
   const openNew = () => {
     setEditingId(null);
@@ -106,6 +110,7 @@ export default function ClientesPage() {
       email: c.email,
       address: c.address,
       stage: c.stage,
+      contactType: c.contactType || "CLIENTE",
       source: c.source,
       tags: c.tags,
       estimatedValue: c.estimatedValue,
@@ -283,6 +288,15 @@ export default function ClientesPage() {
           </button>
         </form>
         <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white"
+        >
+          <option value="ALL">Todos los tipos</option>
+          <option value="CLIENTE">Solo Clientes Comerciales</option>
+          <option value="EXCLUDED">Compañeros / Proveedores (Sin IA)</option>
+        </select>
+        <select
           value={stageFilter}
           onChange={(e) => setStageFilter(e.target.value)}
           className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white"
@@ -333,7 +347,14 @@ export default function ClientesPage() {
                     onClick={() => openDetail(c.id)}
                   >
                     <td className="px-4 py-3">
-                      <div className="font-bold text-slate-900">{c.company}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-900">{c.company}</span>
+                        {c.contactType && c.contactType !== "CLIENTE" && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                            {c.contactType === "PROVEEDOR" ? "🏢 Proveedor · Sin IA" : "👥 Compañero · Sin IA"}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-slate-500">
                         {c.contactName || "Sin contacto"} {c.code ? `· ID: ${c.code}` : ""}
                       </div>
@@ -609,6 +630,18 @@ export default function ClientesPage() {
                   placeholder="3-101-XXXXXX"
                   className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
                 />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600">Tipo de Contacto (Control IA)</label>
+                <select
+                  value={form.contactType}
+                  onChange={(e) => setForm({ ...form, contactType: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl bg-white font-semibold"
+                >
+                  <option value="CLIENTE">Cliente Comercial (Con IA y Kanban)</option>
+                  <option value="INTERNO">👥 Compañero / Agente (Sin IA ni Kanban)</option>
+                  <option value="PROVEEDOR">🏢 Proveedor / Personal (Sin IA ni Kanban)</option>
+                </select>
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-600">Etapa</label>

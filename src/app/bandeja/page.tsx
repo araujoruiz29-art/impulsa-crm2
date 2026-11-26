@@ -62,6 +62,7 @@ interface Conv {
     email: string;
     assignedTo: string;
     stage: string;
+    contactType?: string;
     qualificationScore?: number;
     qualificationStatus?: string;
   } | null;
@@ -158,6 +159,7 @@ export default function BandejaPage() {
   const [syncingEmail, setSyncingEmail] = useState(false);
   const [statusBanner, setStatusBanner] = useState("");
   const [aiGlobalPaused, setAiGlobalPaused] = useState(false);
+  const [aiOnlyNewClients, setAiOnlyNewClients] = useState(false);
   const [togglingGlobalAi, setTogglingGlobalAi] = useState(false);
   const [metaLiveConnected, setMetaLiveConnected] = useState(true);
   const [isCaminanteWorkspace, setIsCaminanteWorkspace] = useState(true);
@@ -345,6 +347,7 @@ export default function BandejaPage() {
       .then((d) => {
         if (d?.integrations) {
           setAiGlobalPaused(Boolean(d.integrations.aiGlobalPaused));
+          setAiOnlyNewClients(Boolean(d.integrations.aiOnlyNewClients));
           setMetaLiveConnected(
             Boolean(d.integrations.metaAccessToken && d.integrations.metaPhoneNumberId)
           );
@@ -377,6 +380,48 @@ export default function BandejaPage() {
       }
     } finally {
       setTogglingGlobalAi(false);
+    }
+  };
+
+  const toggleOnlyNewClients = async () => {
+    setTogglingGlobalAi(true);
+    const nextOnlyNew = !aiOnlyNewClients;
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ integrations: { aiOnlyNewClients: nextOnlyNew } }),
+      });
+      if (res.ok) {
+        setAiOnlyNewClients(nextOnlyNew);
+        setStatusBanner(
+          nextOnlyNew
+            ? "🆕 IA Solo Clientes Nuevos ACTIVADO: la IA solo responderá a prospectos nuevos (etapa Nuevo Lead) y NO contestará a clientes existentes ni a compañeros."
+            : "🌐 IA configurada para atender a todos los clientes comerciales (siempre excluye compañeros/proveedores)."
+        );
+      }
+    } finally {
+      setTogglingGlobalAi(false);
+    }
+  };
+
+  const toggleInternalContact = async () => {
+    if (!activeConv?.client?.id) return;
+    const isCurrentlyInternal =
+      activeConv.client.contactType && activeConv.client.contactType !== "CLIENTE";
+    const nextType = isCurrentlyInternal ? "CLIENTE" : "INTERNO";
+    const res = await fetch(`/api/clients/${activeConv.client.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactType: nextType }),
+    });
+    if (res.ok) {
+      setStatusBanner(
+        nextType === "INTERNO"
+          ? `👥 "${activeConv.client.company}" marcado como Compañero / Sin IA: la IA nunca le contestará, no generará avisos ni saldrá en Ventas Kanban.`
+          : `✅ "${activeConv.client.company}" volvió a ser Cliente comercial normal.`
+      );
+      await load();
     }
   };
 
@@ -646,6 +691,20 @@ export default function BandejaPage() {
             <Bot className="w-4 h-4" />
             {aiGlobalPaused ? "Modo Manual Total (IA Apagada)" : "IA Automática: ACTIVA"}
           </button>
+          {!aiGlobalPaused && (
+            <button
+              onClick={toggleOnlyNewClients}
+              disabled={togglingGlobalAi}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition shadow-xs ${
+                aiOnlyNewClients
+                  ? "bg-sky-100 border-sky-300 text-sky-950 hover:bg-sky-200"
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+              title="Si está activo, la IA solo responde a clientes nuevos y no interviene en clientes ya existentes"
+            >
+              {aiOnlyNewClients ? "🆕 IA: Solo Clientes Nuevos" : "IA: Todos los Clientes"}
+            </button>
+          )}
           <button
             onClick={syncImap}
             disabled={syncingEmail}
@@ -878,7 +937,11 @@ export default function BandejaPage() {
                       </span>
                     );
                   })()}
-                  {c.channel === "WHATSAPP" && (
+                  {c.client?.contactType && c.client.contactType !== "CLIENTE" ? (
+                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
+                      {c.client.contactType === "PROVEEDOR" ? "PROVEEDOR · SIN IA" : "COMPAÑERO · SIN IA"}
+                    </span>
+                  ) : c.channel === "WHATSAPP" ? (
                     <span
                       className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
                         c.aiEnabled ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"
@@ -886,7 +949,7 @@ export default function BandejaPage() {
                     >
                       {c.aiEnabled ? "BOT" : "AGENTE"}
                     </span>
-                  )}
+                  ) : null}
                   {c.unreadCount > 0 && (
                     <span className="ml-auto bg-[#0070C0] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                       {c.unreadCount}
@@ -920,23 +983,29 @@ export default function BandejaPage() {
                     <h2 className="font-bold text-slate-900">
                       {activeConv.client?.company || activeConv.subject}
                     </h2>
-                    <span
-                      className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                        activeConv.aiEnabled
-                          ? "bg-purple-100 text-purple-800"
-                          : "bg-emerald-100 text-emerald-800"
-                      }`}
-                    >
-                      {activeConv.aiEnabled ? (
-                        <>
-                          <Bot className="w-3 h-3" /> BOT ACTIVO
-                        </>
-                      ) : (
-                        <>
-                          <UserCheck className="w-3 h-3" /> AGENTE
-                        </>
-                      )}
-                    </span>
+                    {activeConv.client?.contactType && activeConv.client.contactType !== "CLIENTE" ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                        👥 {activeConv.client.contactType === "PROVEEDOR" ? "PROVEEDOR · SIN IA" : "COMPAÑERO / AGENTE · SIN IA"}
+                      </span>
+                    ) : (
+                      <span
+                        className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                          activeConv.aiEnabled
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
+                        {activeConv.aiEnabled ? (
+                          <>
+                            <Bot className="w-3 h-3" /> BOT ACTIVO
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-3 h-3" /> AGENTE
+                          </>
+                        )}
+                      </span>
+                    )}
                     {activeConv.client?.stage && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-[#0070C0]">
                         {CLIENT_STAGES.find((s) => s.id === activeConv.client?.stage)?.label ||
@@ -982,6 +1051,21 @@ export default function BandejaPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {activeConv.client?.id && (
+                    <button
+                      onClick={toggleInternalContact}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                        activeConv.client.contactType && activeConv.client.contactType !== "CLIENTE"
+                          ? "bg-slate-800 text-white border-slate-800 hover:bg-slate-700"
+                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+                      }`}
+                      title="Marca este contacto como Compañero/Agente para que la IA nunca le conteste ni salga en Ventas Kanban"
+                    >
+                      {activeConv.client.contactType && activeConv.client.contactType !== "CLIENTE"
+                        ? "👥 Interno (Quitar)"
+                        : "👥 Compañero · Sin IA"}
+                    </button>
+                  )}
                   <button
                     onClick={toggleAi}
                     className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${

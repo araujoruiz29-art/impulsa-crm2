@@ -22,7 +22,10 @@ export async function GET() {
     ] = await Promise.all([
       getCompanySettings(workspaceId),
       getIntegrationSettings(workspaceId),
-      prisma.client.findMany({ where: { workspaceId }, orderBy: { updatedAt: "desc" } }),
+      prisma.client.findMany({
+        where: { workspaceId, contactType: "CLIENTE" },
+        orderBy: { updatedAt: "desc" },
+      }),
       prisma.quote.findMany({
         where: { workspaceId },
         orderBy: { createdAt: "desc" },

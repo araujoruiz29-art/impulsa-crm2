@@ -111,7 +111,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.client.findMany({
-      where: { workspaceId },
+      where: { workspaceId, contactType: "CLIENTE" },
       select: { id: true, company: true, contactName: true, phone: true, whatsapp: true, stage: true, optOut: true },
       orderBy: { updatedAt: "desc" },
     }),

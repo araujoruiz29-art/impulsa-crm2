@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       take: 30,
     }),
     prisma.client.findMany({
-      where: { workspaceId },
+      where: { workspaceId, contactType: "CLIENTE" },
       select: {
         id: true,
         company: true,
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
     }
 
     const allClients = await prisma.client.findMany({
-      where: { workspaceId },
+      where: { workspaceId, contactType: "CLIENTE" },
       orderBy: { updatedAt: "desc" },
     });
 

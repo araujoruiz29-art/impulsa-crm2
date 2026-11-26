@@ -141,6 +141,12 @@ export async function syncCrmFromConversation(
   if (!conv || !conv.client) {
     return { updated: false, reason: "Conversación sin cliente vinculado." };
   }
+  if (conv.client.contactType && conv.client.contactType !== "CLIENTE") {
+    return {
+      updated: false,
+      reason: `Contacto marcado como ${conv.client.contactType} (excluido de IA y Kanban).`,
+    };
+  }
 
   const workspaceId = explicitWorkspaceId || conv.workspaceId || "default";
   const client = conv.client;

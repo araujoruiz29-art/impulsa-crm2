@@ -46,6 +46,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.email !== undefined) data.email = String(body.email);
     if (body.address !== undefined) data.address = String(body.address);
     if (body.stage !== undefined) data.stage = String(body.stage);
+    if (body.contactType !== undefined) {
+      data.contactType = ["CLIENTE", "INTERNO", "PROVEEDOR"].includes(String(body.contactType))
+        ? String(body.contactType)
+        : "CLIENTE";
+    }
     if (body.source !== undefined) data.source = String(body.source);
     if (body.tags !== undefined) data.tags = String(body.tags);
     if (body.estimatedValue !== undefined) data.estimatedValue = Number(body.estimatedValue) || 0;
@@ -54,6 +59,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.metaCampaign !== undefined) data.metaCampaign = String(body.metaCampaign);
 
     const client = await prisma.client.update({ where: { id }, data });
+
+    // If marked as INTERNO (Compañero/Agente) or PROVEEDOR: immediately pause AI on all chats & close open alerts
+    if (data.contactType && data.contactType !== "CLIENTE") {
+      await Promise.all([
+        prisma.conversation.updateMany({
+          where: { clientId: id },
+          data: { aiEnabled: false },
+        }),
+        prisma.sellerAlert.updateMany({
+          where: { clientId: id, resolved: false },
+          data: { resolved: true, read: true },
+        }),
+      ]);
+    }
 
     if (body.stage && body.stage !== existing.stage) {
       await prisma.activity.create({

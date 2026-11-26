@@ -214,6 +214,10 @@ export async function POST(req: NextRequest) {
                 orderBy: { createdAt: "asc" },
               })) || conv;
             const targetClientId = canonicalConv.clientId || client.id;
+            const targetClient =
+              targetClientId === client.id
+                ? client
+                : (await prisma.client.findUnique({ where: { id: targetClientId } })) || client;
 
             // Auto-stop any active 1-7-90 follow-up sequence since the customer replied!
             await prisma.sequenceEnrollment
@@ -227,6 +231,22 @@ export async function POST(req: NextRequest) {
               })
               .catch(() => {});
 
+            // 1. Coworkers / Agents / Suppliers (INTERNO / PROVEEDOR): NEVER trigger AI, Alerts, or Kanban autopilot
+            const isExcludedFromAi = targetClient.contactType !== "CLIENTE";
+            if (isExcludedFromAi) {
+              if (canonicalConv.aiEnabled) {
+                await prisma.conversation.update({
+                  where: { id: canonicalConv.id },
+                  data: { aiEnabled: false },
+                });
+              }
+              continue;
+            }
+
+            // 2. "IA solo para Clientes Nuevos": skip auto-reply if client is already past NUEVO stage
+            const skipAiForExistingClient =
+              Boolean(wsCfg.aiOnlyNewClients) && targetClient.stage !== "NUEVO";
+
             await qualifyLeadAndNotifySeller({
               clientId: targetClientId,
               conversationId: canonicalConv.id,
@@ -234,7 +254,12 @@ export async function POST(req: NextRequest) {
               isAudio: Boolean(isAudio),
             });
 
-            if (autoVisionReply && canonicalConv.aiEnabled && !wsCfg.aiGlobalPaused) {
+            if (
+              autoVisionReply &&
+              canonicalConv.aiEnabled &&
+              !wsCfg.aiGlobalPaused &&
+              !skipAiForExistingClient
+            ) {
               const waRes = await sendWhatsAppCloudMessage({
                 workspaceId: wsId,
                 to: from,
@@ -257,7 +282,7 @@ export async function POST(req: NextRequest) {
                   lastMessagePreview: autoVisionReply.slice(0, 140),
                 },
               });
-            } else if (!wsCfg.aiGlobalPaused) {
+            } else if (!wsCfg.aiGlobalPaused && !skipAiForExistingClient) {
               await runTriggerAutomations("NEW_WHATSAPP_MESSAGE", {
                 workspaceId: wsId,
                 clientId: targetClientId,

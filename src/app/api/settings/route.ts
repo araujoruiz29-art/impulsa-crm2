@@ -88,6 +88,7 @@ export async function PATCH(req: NextRequest) {
           ...(i.aiAutoReplyWhatsapp !== undefined ? { aiAutoReplyWhatsapp: Boolean(i.aiAutoReplyWhatsapp) } : {}),
           ...(i.aiAutoReplyEmail !== undefined ? { aiAutoReplyEmail: Boolean(i.aiAutoReplyEmail) } : {}),
           ...(i.aiGlobalPaused !== undefined ? { aiGlobalPaused: Boolean(i.aiGlobalPaused) } : {}),
+          ...(i.aiOnlyNewClients !== undefined ? { aiOnlyNewClients: Boolean(i.aiOnlyNewClients) } : {}),
           ...(i.aiSystemPrompt !== undefined ? { aiSystemPrompt: String(i.aiSystemPrompt) } : {}),
           ...(i.aiKnowledgeBase !== undefined ? { aiKnowledgeBase: String(i.aiKnowledgeBase) } : {}),
           ...(i.visionFoundTemplate !== undefined ? { visionFoundTemplate: String(i.visionFoundTemplate) } : {}),

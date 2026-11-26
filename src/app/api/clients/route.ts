@@ -9,12 +9,18 @@ export async function GET(req: NextRequest) {
   const q = (searchParams.get("q") || "").trim();
   const stage = (searchParams.get("stage") || "").trim();
   const source = (searchParams.get("source") || "").trim();
+  const contactType = (searchParams.get("contactType") || "").trim();
 
   const clients = await prisma.client.findMany({
     where: {
       workspaceId,
       ...(stage && stage !== "ALL" ? { stage } : {}),
       ...(source && source !== "ALL" ? { source } : {}),
+      ...(contactType === "EXCLUDED"
+        ? { contactType: { in: ["INTERNO", "PROVEEDOR"] } }
+        : contactType && contactType !== "ALL"
+        ? { contactType }
+        : {}),
       ...(q
         ? {
             OR: [
@@ -86,6 +92,9 @@ export async function POST(req: NextRequest) {
         email: String(body.email || "").trim(),
         address: String(body.address || "").trim(),
         stage: String(body.stage || "NUEVO"),
+        contactType: ["CLIENTE", "INTERNO", "PROVEEDOR"].includes(String(body.contactType))
+          ? String(body.contactType)
+          : "CLIENTE",
         source: String(body.source || "WHATSAPP"),
         tags: String(body.tags || "").trim(),
         estimatedValue: Number(body.estimatedValue) || 0,

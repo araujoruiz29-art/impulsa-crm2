@@ -82,6 +82,7 @@ model IntegrationSettings {
   aiAutoReplyWhatsapp  Boolean   @default(false)
   aiAutoReplyEmail     Boolean   @default(false)
   aiGlobalPaused       Boolean   @default(false)
+  aiOnlyNewClients     Boolean   @default(false)
   aiSystemPrompt       String    @default("")
   aiKnowledgeBase      String    @default("")
   visionFoundTemplate  String    @default("")
@@ -100,6 +101,7 @@ model Client {
   email               String         @default("")
   address             String         @default("")
   stage               String         @default("NUEVO")
+  contactType         String         @default("CLIENTE") // "CLIENTE" | "INTERNO" | "PROVEEDOR"
   source              String         @default("WHATSAPP")
   tags                String         @default("")
   estimatedValue      Float          @default(0)

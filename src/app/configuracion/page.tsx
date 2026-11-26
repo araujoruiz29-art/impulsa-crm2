@@ -836,6 +836,56 @@ export default function ConfiguracionPage() {
               </button>
             </div>
 
+            {/* AI Only for New Clients Toggle */}
+            <div
+              className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                integrations.aiOnlyNewClients
+                  ? "bg-sky-50 border-sky-300"
+                  : "bg-slate-50 border-slate-200"
+              }`}
+            >
+              <div>
+                <div className="font-bold text-slate-900 text-sm">
+                  {integrations.aiOnlyNewClients
+                    ? "🆕 Alcance IA: Solo Clientes Nuevos (etapa Nuevo Lead)"
+                    : "🌐 Alcance IA: Todos los Clientes Comerciales"}
+                </div>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {integrations.aiOnlyNewClients
+                    ? "La IA solo saluda y atiende automáticamente a prospectos NUEVOS. A clientes existentes (ya contactados/cotizados/ganados) y a compañeros/agentes NO les contesta sola."
+                    : "La IA responde a todos los clientes comerciales (siempre excluye automáticamente a contactos marcados como Compañero/Agente o Proveedor)."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const nextVal = !Boolean(integrations.aiOnlyNewClients);
+                  setIntegrations({ ...integrations, aiOnlyNewClients: nextVal });
+                  const res = await fetch("/api/settings", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ integrations: { aiOnlyNewClients: nextVal } }),
+                  });
+                  if (res.ok) {
+                    setStatusMsg(
+                      nextVal
+                        ? "✅ Activado: la IA ahora responderá ÚNICAMENTE a clientes nuevos (etapa Nuevo Lead)."
+                        : "✅ IA configurada para atender a todos los clientes comerciales."
+                    );
+                  }
+                }}
+                className={`px-4 py-2 text-xs font-bold rounded-xl shrink-0 ${
+                  integrations.aiOnlyNewClients
+                    ? "bg-[#0070C0] hover:bg-[#005a9e] text-white"
+                    : "bg-slate-900 hover:bg-slate-800 text-white"
+                }`}
+              >
+                {integrations.aiOnlyNewClients
+                  ? "Cambiar a Todos los Clientes"
+                  : "Restringir Solo a Clientes Nuevos"}
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-600">Proveedor IA</label>

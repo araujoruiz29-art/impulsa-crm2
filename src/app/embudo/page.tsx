@@ -100,7 +100,7 @@ export default function EmbudoPage() {
   const boardRef = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
-    const res = await fetch("/api/clients");
+    const res = await fetch("/api/clients?contactType=CLIENTE");
     if (res.status === 401) {
       window.location.href = "/login";
       return;

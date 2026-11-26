@@ -67,6 +67,10 @@ export async function runTriggerAutomations(trigger: string, ctx: TriggerContext
         });
         if (cfg.aiGlobalPaused) {
           summary = "Omitido: CRM en Modo Manual Total (IA global pausada).";
+        } else if (client && client.contactType !== "CLIENTE") {
+          summary = `Omitido: contacto marcado como ${client.contactType} (sin IA).`;
+        } else if (cfg.aiOnlyNewClients && client && client.stage !== "NUEVO") {
+          summary = "Omitido: modo «IA solo para Clientes Nuevos» activo.";
         } else if (conv && conv.aiEnabled) {
           const ai = await generateAiReply({
             workspaceId,
