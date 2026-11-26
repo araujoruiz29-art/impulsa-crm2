@@ -30,6 +30,8 @@ export interface AutopilotResult {
   estimatedValue?: number;
   tags?: string;
   summary?: string;
+  buyingIntent?: "COMPRA_REAL" | "CONSULTA";
+  buyingScore?: number;
   taskCreated?: string;
   reason?: string;
 }
@@ -109,6 +111,23 @@ function deterministicFallbackAnalysis(
     }
   }
 
+  const hasBuyingSignal =
+    /(comprar|ordenar|reservar|apartar|agendar cita|hacer el pedido|confirm|aprob|lo quiero|me lo llevo|sinpe|iban|pagar|transferencia|cotiz|proforma|factura|cu[aá]nto vale|cu[aá]nto cuesta)/i.test(
+      allText
+    );
+  const buyingIntent: "COMPRA_REAL" | "CONSULTA" =
+    hasBuyingSignal || ["COTIZADO", "NEGOCIACION", "GANADO"].includes(stage)
+      ? "COMPRA_REAL"
+      : "CONSULTA";
+  const buyingScore =
+    stage === "GANADO"
+      ? 95
+      : stage === "NEGOCIACION"
+      ? 80
+      : hasBuyingSignal
+      ? 65
+      : 20;
+
   return {
     stage,
     company: "",
@@ -117,6 +136,8 @@ function deterministicFallbackAnalysis(
     estimatedValue,
     tags,
     summary: "",
+    buyingIntent,
+    buyingScore,
     followUpTask,
   };
 }
@@ -174,7 +195,7 @@ export async function syncCrmFromConversation(
 
   if (cfg.aiApiKey && cfg.aiProvider === "gemini") {
     try {
-      const prompt = `Analiza esta conversación comercial de WhatsApp/Correo para actualizar automáticamente el CRM (Kanban, ficha del cliente y Agenda) SIN intervención del vendedor.
+      const prompt = `Analiza esta conversación comercial de WhatsApp/Messenger/Instagram/Correo para actualizar automáticamente el CRM (Kanban, clasificación Compra vs Consulta, ficha del cliente y Agenda) SIN intervención del vendedor.
 
 FECHA ACTUAL EN COSTA RICA: ${nowCR}
 CLIENTE ACTUAL: Empresa="${client.company}", Contacto="${client.contactName}", EtapaActual="${client.stage}", ValorEstimado=${client.estimatedValue}
@@ -185,16 +206,19 @@ ${transcript}
 Devuelve ÚNICAMENTE un JSON válido (sin markdown ni texto extra):
 {
   "stage": "NUEVO | CONTACTADO | COTIZADO | SEGUIMIENTO | NEGOCIACION | GANADO | PERDIDO",
+  "buyingIntent": "COMPRA_REAL | CONSULTA",
+  "buyingScore": 0,
   "company": "Nombre real de empresa/institución si se mencionó (o vacío si no)",
   "contactName": "Nombre real de la persona si se mencionó (o vacío si no)",
   "email": "Correo electrónico si aparece en el chat (o vacío)",
   "estimatedValue": 0,
-  "tags": ["máximo 4 etiquetas cortas relevantes, ej. Uniformes, Calzado, SICOP, Proforma"],
+  "tags": ["máximo 4 etiquetas cortas relevantes al negocio y pedido"],
   "summary": "Resumen ejecutivo de 1 línea sobre qué busca el cliente y en qué quedó el chat",
   "followUpTask": null o {"title": "Acción concreta con cliente", "dueDateIso": "YYYY-MM-DDTHH:mm:00-06:00", "type": "TAREA | LLAMADA | WHATSAPP"}
 }
 
 REGLAS:
+- buyingIntent: pon "COMPRA_REAL" (y buyingScore entre 60 y 100) si el cliente pide precio/cotización/proforma, cantidades, tallas/detalles para comprar, cita/reserva, envío o cómo pagar. Pon "CONSULTA" (y buyingScore entre 10 y 40) si solo saluda o pregunta información general (horario, ubicación, "qué venden", soporte).
 - NUEVO: solo saludó o escribió sin respuesta aún.
 - CONTACTADO: ya hubo respuesta del vendedor/bot o intercambio inicial.
 - COTIZADO: ya se enviaron precios, propuesta o proforma.
@@ -208,7 +232,7 @@ REGLAS:
         apiKey: cfg.aiApiKey,
         preferredModel: cfg.aiModel,
         temperature: 0.1,
-        maxOutputTokens: 450,
+        maxOutputTokens: 480,
         parts: [{ text: prompt }],
       });
       const m = text.match(/\{[\s\S]*\}/);
@@ -217,6 +241,13 @@ REGLAS:
         const rawStage = String(parsed.stage || "").toUpperCase() as StageId;
         if (VALID_STAGES.includes(rawStage)) {
           analysis.stage = rawStage;
+        }
+        const rawIntent = String(parsed.buyingIntent || "").toUpperCase();
+        if (rawIntent === "COMPRA_REAL" || rawIntent === "CONSULTA") {
+          analysis.buyingIntent = rawIntent;
+        }
+        if (Number.isFinite(Number(parsed.buyingScore))) {
+          analysis.buyingScore = Math.max(0, Math.min(100, Math.round(Number(parsed.buyingScore))));
         }
         if (typeof parsed.company === "string") analysis.company = parsed.company.trim();
         if (typeof parsed.contactName === "string") analysis.contactName = parsed.contactName.trim();
@@ -287,6 +318,19 @@ REGLAS:
     }
   }
 
+  const nextQualScore =
+    analysis.buyingIntent === "COMPRA_REAL"
+      ? Math.max(analysis.buyingScore, client.qualificationScore || 0, 60)
+      : Math.min(analysis.buyingScore, 40);
+  const nextQualStatus =
+    nextQualScore >= 75
+      ? "LISTO_PARA_COMPRAR"
+      : nextQualScore >= 50
+      ? "CALIENTE"
+      : nextQualScore >= 30
+      ? "TIBIO"
+      : "FRIO";
+
   await prisma.client.update({
     where: { id: client.id },
     data: {
@@ -297,6 +341,8 @@ REGLAS:
       estimatedValue: nextEstimated,
       tags: nextTags,
       notes: nextNotes,
+      qualificationScore: nextQualScore,
+      qualificationStatus: nextQualStatus,
     },
   });
 
@@ -335,6 +381,8 @@ REGLAS:
     estimatedValue: nextEstimated,
     tags: nextTags,
     summary: analysis.summary,
+    buyingIntent: analysis.buyingIntent,
+    buyingScore: nextQualScore,
     taskCreated: taskCreated || undefined,
   };
 }
