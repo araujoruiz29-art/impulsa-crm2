@@ -491,6 +491,84 @@ Devuelve ÚNICAMENTE un JSON válido (sin markdown ni texto extra):
       return NextResponse.json({ ok: true, mode: "template", script: fallbackScript });
     }
 
+    // 2B. PHOTO-TO-REEL STUDIO PLAN + CINEMATIC AI PROMPT (Clean Photo-Only or Commercial)
+    if (action === "photo_reel_plan") {
+      const product = String(body.product || "Productos destacados").trim();
+      const photoCount = Math.max(2, Math.min(12, Number(body.photoCount) || 5));
+      const priceOrOffer = String(body.priceOrOffer || "").trim();
+      const format = body.format === "horizontal" ? "16:9" : "9:16";
+      const onlyPhotosMode = Boolean(body.onlyPhotosMode);
+      const kw = product.split(/\s+/)[0]?.toUpperCase().replace(/[^A-Z0-9]/g, "") || "PRECIO";
+
+      const fallbackPlan = {
+        hook: `LO NUEVO EN ${company.brandName.toUpperCase()}`,
+        priceBadge: priceOrOffer || "Envíos a todo Costa Rica · Consulta hoy",
+        ctaKeyword: kw,
+        ctaText: `👇 Comenta «${kw}» y te enviamos DM`,
+        slideCaptions: Array.from({ length: photoCount }, (_, i) =>
+          i === 0
+            ? `Descubre ${product}`
+            : i === photoCount - 1
+            ? `Disponible hoy en ${company.brandName}`
+            : `Detalle y calidad real · Foto ${i + 1}`
+        ),
+        socialCaption: `🔥 ${product} disponible en ${company.brandName}.\n${
+          priceOrOffer ? `✅ ${priceOrOffer}\n` : ""
+        }👇 Comenta «${kw}» y te enviamos precio y disponibilidad por mensaje privado al instante.`,
+        hashtags: "#CostaRica #ReelsCR #Anuncios #ComprasCR #Emprendimiento",
+        cinematicAiPrompt: onlyPhotosMode
+          ? `Turn these ${photoCount} photos of ${product} (${company.brandName}) into a 15-second cinematic showcase video in ${format}. Preserve the exact design, textures, materials, colors, and proportions of every product. Use smooth forward camera moves, subtle parallax, natural depth, and seamless directional transitions between photos. Keep geometry 100% stable: no melting edges, no distorted logos, no captions, no text overlays, no watermarks, and no voiceover. Clean commercial color grading timed to an upbeat modern rhythm.`
+          : `Turn these ${photoCount} photos of ${product} (${company.brandName}) into a dynamic 15-second commercial Reel in ${format}. Preserve the exact product textures, materials, and proportions with smooth forward push-ins, subtle parallax, and fast clean transitions synced to a modern beat. Keep geometry stable with realistic lighting and crisp studio contrast.`,
+      };
+
+      if (!cfg.aiApiKey) {
+        return NextResponse.json({ ok: true, mode: "template", plan: fallbackPlan });
+      }
+
+      try {
+        const prompt = `Eres director creativo de Reels y anuncios en redes sociales para ${company.brandName} (Costa Rica).
+PRODUCTO / COLECCIÓN: ${product}
+CANTIDAD DE FOTOS: ${photoCount}
+PRECIO / OFERTA: ${priceOrOffer || "No especificado"}
+FORMATO: ${format}
+MODO ELEGIDO: ${onlyPhotosMode ? "SOLO FOTOS CINEMATOGRÁFICO (sin textos ni logos encima del video)" : "COMERCIAL (con gancho, precio y CTA en pantalla)"}
+
+Devuelve ÚNICAMENTE un JSON válido (sin markdown ni texto extra):
+{
+  "hook": "Gancho corto en mayúsculas máx 34 chars sin faltas de ortografía",
+  "priceBadge": "Etiqueta corta de precio/beneficio máx 42 chars",
+  "ctaKeyword": "PALABRA_CLAVE_1_PALABRA (ej. PRECIO o QUIERO)",
+  "ctaText": "👇 Comenta «PALABRA» y te enviamos DM",
+  "slideCaptions": ["Texto breve foto 1", "Texto breve foto 2", "... hasta ${photoCount} elementos"],
+  "socialCaption": "Descripción viral lista para publicar en IG/FB invitando a comentar la palabra clave para recibir DM automático",
+  "hashtags": "#Hasta6HashtagsLocales",
+  "cinematicAiPrompt": "Prompt detallado en inglés listo para pegar en Google Veo, Kling, Runway o Shorty Edit que convierta estas ${photoCount} fotos en un video cinematográfico de 15 segundos en ${format}, preservando texturas y geometría exacta${onlyPhotosMode ? ", especificando explícitamente NO text overlays, NO captions, NO logos, NO voiceover" : ""}"
+}`;
+        const { text } = await callGeminiResilient({
+          apiKey: cfg.aiApiKey,
+          preferredModel: cfg.aiModel,
+          temperature: 0.55,
+          maxOutputTokens: 1000,
+          parts: [{ text: prompt }],
+        });
+        const m = text.match(/\{[\s\S]*\}/);
+        if (m) {
+          const parsed = JSON.parse(m[0]);
+          if (parsed.cinematicAiPrompt) {
+            return NextResponse.json({
+              ok: true,
+              mode: "gemini",
+              plan: { ...fallbackPlan, ...parsed },
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Photo reel plan Gemini error:", e);
+      }
+
+      return NextResponse.json({ ok: true, mode: "template", plan: fallbackPlan });
+    }
+
     // 3. AD COPY VARIATIONS GENERATOR (existing)
     const productOrPromo = String(body.productOrPromo || "").trim();
     const objective = String(body.objective || "Mensajes a WhatsApp / Instagram").trim();

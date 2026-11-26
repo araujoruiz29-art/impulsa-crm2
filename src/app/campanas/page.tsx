@@ -21,6 +21,7 @@ import {
   Copy,
 } from "lucide-react";
 import { CLIENT_STAGES, formatDateCR, formatMoney } from "@/lib/format";
+import { PhotoReelStudio } from "@/components/PhotoReelStudio";
 
 interface MetaAdCampaignItem {
   id: string;
@@ -1536,6 +1537,13 @@ export default function CampanasPage() {
               </div>
             )}
           </div>
+
+          {/* Photo-to-Reel Studio (Clean Photo-Only Mode or Commercial Mode + AI Cinematic Prompt) */}
+          <PhotoReelStudio
+            brandName={senderInfo.brandName || "impulsa CRM"}
+            onNotify={(msg) => setBanner(msg)}
+            onError={(msg) => setErrorBanner(msg)}
+          />
 
           {/* In-Store Video Script Studio + Direct Meta Ads Campaign Launcher */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

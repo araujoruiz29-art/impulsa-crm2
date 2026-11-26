@@ -55,6 +55,12 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         purpose:
           "Permite cambiar entre tus empresas registradas o crear una nueva empresa independiente con el botón «+ Crear nueva empresa».",
       },
+      {
+        control: "🔥 Ember IA · Agente de Ayuda (botón flotante)",
+        location: "Esquina inferior derecha (en todas las ventanas)",
+        purpose:
+          "Abre a Ember, tu agente de ayuda IA entrenado con todo el Manual de Uso y Conexiones de impulsa CRM. Respóndele dudas paso a paso en lenguaje natural, pide guiones o usa sus botones de acceso directo para saltar al módulo que necesitas.",
+      },
     ],
   },
   {
@@ -559,10 +565,10 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Crea en 1 clic la secuencia de 9 pasos (Días 1, 3, 4, 5, 7 + Nutrición 15, 30, 60 y 90 días), permite editar cada paso, asignar plantillas Meta, inscribir clientes o etapas completas y ejecutar envíos pendientes.",
       },
       {
-        control: "Pestaña 3 · Anuncios FB & IG (Meta Ads + Estudio IA de Guiones)",
+        control: "Pestaña 3 · Anuncios FB & IG (Meta Ads + Reels desde Fotos + Guiones IA)",
         location: "Selector superior",
         purpose:
-          "Muestra tus campañas de Facebook e Instagram con presupuesto, gasto 30d, alcance, leads y Costo/Resultado en ₡, permite Pausar/Activar anuncios en 1 clic, mide el retorno real en tu CRM, incluye el Estudio IA de Guiones para grabar Reels en tienda (sin terceros), el Lanzador Directo de Campañas Meta Ads y el Generador IA de Anuncios.",
+          "Muestra tus campañas de Facebook e Instagram con presupuesto, gasto 30d, alcance, leads y Costo/Resultado en ₡, permite Pausar/Activar anuncios en 1 clic, mide el retorno real en tu CRM, incluye el Creador de Videos / Reels desde Fotos (en Modo Solo Fotos Cinematográfico o Comercial), el Estudio IA de Guiones para grabar Reels en tienda, el Lanzador Directo de Campañas Meta Ads y el Generador IA de Anuncios.",
       },
     ],
   },
@@ -573,9 +579,15 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     route: "/campanas (Pestaña 3)",
     group: "IA Y SISTEMA",
     summary:
-      "Receta práctica paso a paso para que cualquier persona del equipo pueda grabar un Reel en tienda, lanzar la campaña pagada en Facebook e Instagram y medir resultados en colones (₡) sin depender de agencias externas.",
+      "Receta práctica paso a paso para que cualquier persona del equipo pueda crear un Reel desde fotos o grabarlo en tienda, lanzar la campaña pagada en Facebook e Instagram y medir resultados en colones (₡) sin depender de agencias externas.",
     tip: "Antes de publicar tu primer anuncio, verifica en Meta Business Suite que tu Cuenta Publicitaria esté verificada («Verificar ahora») y con tarjeta activa, y que tu Meta Ad Account ID (ej. act_...) esté guardado en Conexiones y empresa → Meta Cloud API.",
     buttons: [
+      {
+        control: "Opción Rápida · Crear Video Reel Solo con Fotos (sin grabarse, 2 min)",
+        location: "Campañas → 3. Anuncios FB & IG → Creador de Videos / Reels desde Fotos",
+        purpose:
+          "Sube de 2 a 12 fotos de tus productos (o jálalas directo del Catálogo), elige «📸 Modo Solo Fotos (Cinematográfico limpio)» para generar un video fluido sin textos ni banners encima, o «📣 Modo Comercial» para agregar gancho, precio y CTA («Comenta PRECIO»). Presiona «🎬 Generar Video» para descargarlo con transiciones suaves y música libre de derechos, o copia el «Prompt Cinematográfico IA» listo para herramientas externas como Google Veo, Kling o Shorty Edit.",
+      },
       {
         control: "Paso 1 · Crear el Guion y Tomas con IA (2 min)",
         location: "Campañas → 3. Anuncios FB & IG → Estudio IA de Guiones",

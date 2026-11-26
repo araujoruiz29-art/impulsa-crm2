@@ -27,6 +27,7 @@ import {
   FileQuestion,
   Megaphone,
 } from "lucide-react";
+import { EmberAssistant } from "@/components/EmberAssistant";
 
 interface WorkspaceSummary {
   id: string;
@@ -622,6 +623,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       )}
+      {/* Global In-App AI Help Agent: Ember */}
+      <EmberAssistant />
     </div>
   );
 }
