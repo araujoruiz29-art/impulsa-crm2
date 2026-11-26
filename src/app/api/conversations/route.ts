@@ -4,9 +4,13 @@ import { normalizeCRPhone } from "@/lib/format";
 import { runTriggerAutomations } from "@/lib/automations";
 import { qualifyLeadAndNotifySeller } from "@/lib/ai-agent";
 import { getActiveWorkspaceId } from "@/lib/workspace";
+import { mergeDuplicateWhatsAppThreads } from "@/lib/conversation-merge";
 
 export async function GET(req: NextRequest) {
   const workspaceId = await getActiveWorkspaceId();
+  // Auto-merge any duplicate WhatsApp threads from parallel Meta webhooks
+  await mergeDuplicateWhatsAppThreads(workspaceId).catch(() => {});
+
   const { searchParams } = new URL(req.url);
   const channel = (searchParams.get("channel") || "").trim();
   const accountEmail = (searchParams.get("accountEmail") || "").trim().toLowerCase();

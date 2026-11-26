@@ -7,6 +7,11 @@ import { downloadAndTranscribeMetaAudio } from "@/lib/audio";
 import { qualifyLeadAndNotifySeller } from "@/lib/ai-agent";
 import { downloadMetaWhatsAppImage, identifyShoeAndFetchLiveStock } from "@/lib/vision-stock";
 import { sendWhatsAppCloudMessage } from "@/lib/meta";
+import {
+  findOrCreateWhatsAppClient,
+  findOrCreateWhatsAppConversation,
+  mergeDuplicateWhatsAppThreads,
+} from "@/lib/conversation-merge";
 
 // Official Meta Webhook Verification (GET) - Multi-tenant across all workspaces
 export async function GET(req: NextRequest) {
@@ -75,15 +80,83 @@ export async function POST(req: NextRequest) {
           const contacts = Array.isArray(value.contacts) ? value.contacts : [];
           for (const msg of value.messages) {
             const from = normalizeCRPhone(msg.from || "");
-            const profileName = contacts[0]?.profile?.name || from;
+            if (!from) continue;
+
+            // Skip duplicate Meta webhook retries for the exact same WhatsApp message ID
+            if (msg.id) {
+              const dupMsg = await prisma.message.findFirst({
+                where: { externalMessageId: String(msg.id) },
+                select: { id: true },
+              });
+              if (dupMsg) continue;
+            }
+
+            // Handle emoji reactions cleanly without creating empty chats or triggering AI
+            if (msg.type === "reaction") {
+              const emoji = String(msg.reaction?.emoji || "").trim();
+              if (!emoji) continue; // User removed a reaction
+              const existingConv = await prisma.conversation.findFirst({
+                where: {
+                  workspaceId: wsId,
+                  channel: "WHATSAPP",
+                  externalId: { in: [from, from.startsWith("506") ? from.slice(3) : from] },
+                },
+                orderBy: { createdAt: "asc" },
+              });
+              if (existingConv) {
+                const reactionText = `Reaccionó ${emoji}`;
+                await prisma.message.create({
+                  data: {
+                    conversationId: existingConv.id,
+                    direction: "INBOUND",
+                    senderName: contacts[0]?.profile?.name || existingConv.subject || from,
+                    senderRole: "CLIENT",
+                    body: reactionText,
+                    externalMessageId: msg.id || "",
+                    status: "DELIVERED",
+                  },
+                });
+                await prisma.conversation.update({
+                  where: { id: existingConv.id },
+                  data: {
+                    lastMessageAt: new Date(),
+                    lastMessagePreview: reactionText,
+                  },
+                });
+              }
+              continue;
+            }
+
+            const matchedContact = contacts.find(
+              (ct: { wa_id?: string }) => normalizeCRPhone(ct.wa_id || "") === from
+            );
+            const profileName = matchedContact?.profile?.name || contacts[0]?.profile?.name || from;
             const isAudio = msg.type === "audio" && msg.audio?.id;
             const isImage = msg.type === "image" && msg.image?.id;
+
             let bodyText =
               msg.text?.body ||
               msg.image?.caption ||
+              msg.video?.caption ||
+              msg.document?.caption ||
               msg.button?.text ||
               msg.interactive?.button_reply?.title ||
-              `[Archivo ${msg.type || "multimedia"}]`;
+              msg.interactive?.list_reply?.title ||
+              "";
+
+            if (!bodyText) {
+              if (msg.type === "document") {
+                bodyText = `📄 Documento recibido: ${msg.document?.filename || "archivo"}`;
+              } else if (msg.type === "video") {
+                bodyText = "🎥 Video recibido";
+              } else if (msg.type === "sticker") {
+                bodyText = "😊 Sticker recibido";
+              } else if (msg.type === "location" && msg.location) {
+                bodyText = `📍 Ubicación: https://maps.google.com/?q=${msg.location.latitude},${msg.location.longitude}`;
+              } else {
+                bodyText = `[Archivo ${msg.type || "multimedia"}]`;
+              }
+            }
 
             let rawTextForAi = bodyText;
             let autoVisionReply = "";
@@ -111,50 +184,14 @@ export async function POST(req: NextRequest) {
               }
             }
 
-            let client = await prisma.client.findFirst({
-              where: { workspaceId: wsId, OR: [{ whatsapp: from }, { phone: from }] },
-            });
-            if (!client) {
-              client = await prisma.client.create({
-                data: {
-                  workspaceId: wsId,
-                  company: profileName,
-                  contactName: profileName,
-                  phone: from,
-                  whatsapp: from,
-                  stage: "NUEVO",
-                  source: "WHATSAPP",
-                  notes: "Capturado automáticamente desde WhatsApp Cloud API.",
-                },
-              });
-            }
-
-            let conv = await prisma.conversation.findFirst({
-              where: { workspaceId: wsId, channel: "WHATSAPP", externalId: from },
-            });
-            if (!conv) {
-              conv = await prisma.conversation.create({
-                data: {
-                  workspaceId: wsId,
-                  channel: "WHATSAPP",
-                  externalId: from,
-                  subject: profileName,
-                  clientId: client.id,
-                  unreadCount: 1,
-                  lastMessageAt: new Date(),
-                  lastMessagePreview: bodyText.slice(0, 140),
-                },
-              });
-            } else {
-              await prisma.conversation.update({
-                where: { id: conv.id },
-                data: {
-                  unreadCount: { increment: 1 },
-                  lastMessageAt: new Date(),
-                  lastMessagePreview: bodyText.slice(0, 140),
-                },
-              });
-            }
+            const client = await findOrCreateWhatsAppClient(wsId, from, profileName);
+            const conv = await findOrCreateWhatsAppConversation(
+              wsId,
+              from,
+              profileName,
+              client.id,
+              bodyText
+            );
 
             await prisma.message.create({
               data: {
@@ -168,14 +205,23 @@ export async function POST(req: NextRequest) {
               },
             });
 
+            // Re-check for any concurrent duplicate threads created in the same millisecond
+            await mergeDuplicateWhatsAppThreads(wsId).catch(() => {});
+            const canonicalConv =
+              (await prisma.conversation.findFirst({
+                where: { workspaceId: wsId, channel: "WHATSAPP", externalId: from },
+                orderBy: { createdAt: "asc" },
+              })) || conv;
+            const targetClientId = canonicalConv.clientId || client.id;
+
             await qualifyLeadAndNotifySeller({
-              clientId: client.id,
-              conversationId: conv.id,
+              clientId: targetClientId,
+              conversationId: canonicalConv.id,
               messageBody: rawTextForAi,
               isAudio: Boolean(isAudio),
             });
 
-            if (autoVisionReply && conv.aiEnabled && !wsCfg.aiGlobalPaused) {
+            if (autoVisionReply && canonicalConv.aiEnabled && !wsCfg.aiGlobalPaused) {
               const waRes = await sendWhatsAppCloudMessage({
                 workspaceId: wsId,
                 to: from,
@@ -183,7 +229,7 @@ export async function POST(req: NextRequest) {
               });
               await prisma.message.create({
                 data: {
-                  conversationId: conv.id,
+                  conversationId: canonicalConv.id,
                   direction: "OUTBOUND",
                   senderName: "Agente Visual + Stock Web",
                   senderRole: "AI",
@@ -192,7 +238,7 @@ export async function POST(req: NextRequest) {
                 },
               });
               await prisma.conversation.update({
-                where: { id: conv.id },
+                where: { id: canonicalConv.id },
                 data: {
                   lastMessageAt: new Date(),
                   lastMessagePreview: autoVisionReply.slice(0, 140),
@@ -201,8 +247,8 @@ export async function POST(req: NextRequest) {
             } else if (!wsCfg.aiGlobalPaused) {
               await runTriggerAutomations("NEW_WHATSAPP_MESSAGE", {
                 workspaceId: wsId,
-                clientId: client.id,
-                conversationId: conv.id,
+                clientId: targetClientId,
+                conversationId: canonicalConv.id,
                 messageBody: rawTextForAi,
                 channel: "WHATSAPP",
               });
