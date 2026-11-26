@@ -22,8 +22,12 @@ import {
   Eye,
   EyeOff,
   RotateCcw,
+  Clock,
+  UserCheck,
+  LayoutTemplate,
+  CheckCheck,
 } from "lucide-react";
-import { formatDateCR, normalizeCRPhone } from "@/lib/format";
+import { CLIENT_STAGES, formatDateCR, normalizeCRPhone } from "@/lib/format";
 import { ShoeVisionModal } from "@/components/ShoeVisionModal";
 
 interface Msg {
@@ -81,6 +85,62 @@ interface InboxTabDef {
   isDefaultEmail?: boolean;
 }
 
+interface MetaTemplateOpt {
+  id: string;
+  name: string;
+  language: string;
+  category: string;
+  bodyText: string;
+  headerText: string;
+  variableCount: number;
+}
+
+function getWhatsAppWindowInfo(conv: Conv): {
+  status: "open" | "expiring" | "closed";
+  label: string;
+  shortLabel: string;
+} {
+  const inbound = [...(conv.messages || [])]
+    .reverse()
+    .find((m) => m.direction === "INBOUND");
+  if (!inbound) {
+    return {
+      status: "closed",
+      label: "Sin mensaje del cliente · Usar Plantilla Meta",
+      shortLabel: "24h cerrada",
+    };
+  }
+  const elapsedMs = Date.now() - new Date(inbound.createdAt).getTime();
+  const remainingMs = 24 * 60 * 60 * 1000 - elapsedMs;
+  if (remainingMs <= 0) {
+    return {
+      status: "closed",
+      label: "Ventana 24h cerrada · Usar Plantilla Meta",
+      shortLabel: "24h cerrada",
+    };
+  }
+  const hrs = Math.floor(remainingMs / (60 * 60 * 1000));
+  const mins = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+  if (hrs < 4) {
+    return {
+      status: "expiring",
+      label: `Por vencer: quedan ${hrs}h ${mins}m`,
+      shortLabel: `⚠️ ${hrs}h ${mins}m`,
+    };
+  }
+  return {
+    status: "open",
+    label: `Ventana 24h: quedan ${hrs}h ${mins}m`,
+    shortLabel: `${hrs}h`,
+  };
+}
+
+function formatTimeCR(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 const TAB_PREFS_KEY = "impulsa_bandeja_tabs_v1";
 
 export default function BandejaPage() {
@@ -101,6 +161,16 @@ export default function BandejaPage() {
   const [togglingGlobalAi, setTogglingGlobalAi] = useState(false);
   const [metaLiveConnected, setMetaLiveConnected] = useState(true);
   const [isCaminanteWorkspace, setIsCaminanteWorkspace] = useState(true);
+  const [syncingCrm, setSyncingCrm] = useState(false);
+
+  // Meta approved templates modal
+  const [tplOpen, setTplOpen] = useState(false);
+  const [tplLoading, setTplLoading] = useState(false);
+  const [tplError, setTplError] = useState("");
+  const [templates, setTemplates] = useState<MetaTemplateOpt[]>([]);
+  const [selectedTpl, setSelectedTpl] = useState<MetaTemplateOpt | null>(null);
+  const [tplVars, setTplVars] = useState<string[]>([]);
+  const [sendingTpl, setSendingTpl] = useState(false);
 
   // Simulator modal for testing WhatsApp / Meta Lead Ads locally
   const [simOpen, setSimOpen] = useState(false);
@@ -448,6 +518,111 @@ export default function BandejaPage() {
     router.push(`/cotizaciones?${params.toString()}`);
   };
 
+  const syncCrmNow = async () => {
+    if (!activeConv) return;
+    setSyncingCrm(true);
+    setStatusBanner("");
+    try {
+      const res = await fetch(`/api/conversations/${activeConv.id}/sync-crm`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok && data.result?.updated) {
+        const r = data.result;
+        const stageLabel = CLIENT_STAGES.find((s) => s.id === r.stage)?.label || r.stage;
+        const parts = [`Etapa Kanban → ${stageLabel}`];
+        if (r.tags) parts.push(`Etiquetas: ${r.tags}`);
+        if (r.taskCreated) parts.push(`📅 Agendado: ${r.taskCreated}`);
+        if (r.summary) parts.push(`Resumen: ${r.summary}`);
+        setStatusBanner(`✨ CRM actualizado automáticamente: ${parts.join(" · ")}`);
+        await load();
+      } else {
+        setStatusBanner(data.error || data.result?.reason || "No hubo cambios nuevos para actualizar.");
+      }
+    } finally {
+      setSyncingCrm(false);
+    }
+  };
+
+  const openTemplatesModal = async () => {
+    setTplOpen(true);
+    setTplLoading(true);
+    setTplError("");
+    try {
+      const res = await fetch("/api/meta/templates");
+      const data = await res.json();
+      if (data.error) {
+        setTplError(data.error);
+        setTemplates([]);
+      } else {
+        const list: MetaTemplateOpt[] = data.templates || [];
+        setTemplates(list);
+        if (list.length > 0) {
+          selectTemplateItem(list[0]);
+        } else if (data.warning) {
+          setTplError(data.warning);
+        }
+      }
+    } catch {
+      setTplError("No se pudieron cargar las plantillas de Meta.");
+    } finally {
+      setTplLoading(false);
+    }
+  };
+
+  const selectTemplateItem = (t: MetaTemplateOpt) => {
+    setSelectedTpl(t);
+    const defaultName =
+      activeConv?.client?.contactName ||
+      activeConv?.client?.company ||
+      activeConv?.subject ||
+      "Cliente";
+    const initialVars = Array.from({ length: t.variableCount }, (_, idx) =>
+      idx === 0 ? defaultName : ""
+    );
+    setTplVars(initialVars);
+  };
+
+  const renderTemplatePreview = (t: MetaTemplateOpt | null, vars: string[]) => {
+    if (!t) return "";
+    return t.bodyText.replace(/\{\{(\d+)\}\}/g, (_, numStr) => {
+      const idx = Number(numStr) - 1;
+      return vars[idx]?.trim() || `{{${numStr}}}`;
+    });
+  };
+
+  const sendMetaTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeConv || !selectedTpl) return;
+    setSendingTpl(true);
+    setTplError("");
+    try {
+      const preview = renderTemplatePreview(selectedTpl, tplVars);
+      const res = await fetch("/api/meta/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: activeConv.id,
+          to: activeConv.externalId,
+          templateName: selectedTpl.name,
+          language: selectedTpl.language,
+          variables: tplVars,
+          renderedPreview: preview,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTplError(data.error || "No se pudo enviar la plantilla.");
+      } else {
+        setTplOpen(false);
+        setStatusBanner(`✅ ${data.message}`);
+        await load();
+      }
+    } finally {
+      setSendingTpl(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -686,8 +861,31 @@ export default function BandejaPage() {
                       {c.accountEmail}
                     </span>
                   )}
-                  {c.client?.assignedTo && !c.accountEmail && (
-                    <span className="text-[10px] text-slate-500">Resp: {c.client.assignedTo}</span>
+                  {c.channel === "WHATSAPP" && (() => {
+                    const win = getWhatsAppWindowInfo(c);
+                    return (
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                          win.status === "expiring"
+                            ? "bg-amber-100 text-amber-900"
+                            : win.status === "closed"
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-slate-100 text-slate-500"
+                        }`}
+                        title={win.label}
+                      >
+                        {win.shortLabel}
+                      </span>
+                    );
+                  })()}
+                  {c.channel === "WHATSAPP" && (
+                    <span
+                      className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                        c.aiEnabled ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {c.aiEnabled ? "BOT" : "AGENTE"}
+                    </span>
                   )}
                   {c.unreadCount > 0 && (
                     <span className="ml-auto bg-[#0070C0] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
@@ -713,7 +911,7 @@ export default function BandejaPage() {
               {/* Chat header */}
               <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-slate-50/70">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {activeConv.channel === "EMAIL" ? (
                       <Mail className="w-4 h-4 text-[#0070C0]" />
                     ) : (
@@ -722,12 +920,52 @@ export default function BandejaPage() {
                     <h2 className="font-bold text-slate-900">
                       {activeConv.client?.company || activeConv.subject}
                     </h2>
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                        activeConv.aiEnabled
+                          ? "bg-purple-100 text-purple-800"
+                          : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {activeConv.aiEnabled ? (
+                        <>
+                          <Bot className="w-3 h-3" /> BOT ACTIVO
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className="w-3 h-3" /> AGENTE
+                        </>
+                      )}
+                    </span>
+                    {activeConv.client?.stage && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-[#0070C0]">
+                        {CLIENT_STAGES.find((s) => s.id === activeConv.client?.stage)?.label ||
+                          activeConv.client.stage}
+                      </span>
+                    )}
                   </div>
-                  <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                  <div className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
                     <span>
                       {activeConv.client?.contactName ? `${activeConv.client.contactName} · ` : ""}
-                      {activeConv.externalId} · Responsable: {activeConv.client?.assignedTo || "Jelsing R."}
+                      {activeConv.externalId}
                     </span>
+                    {activeConv.channel === "WHATSAPP" && (() => {
+                      const win = getWhatsAppWindowInfo(activeConv);
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            win.status === "open"
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                              : win.status === "expiring"
+                              ? "bg-amber-100 text-amber-900 border border-amber-300"
+                              : "bg-rose-100 text-rose-800 border border-rose-200"
+                          }`}
+                        >
+                          <Clock className="w-3 h-3" />
+                          {win.label}
+                        </span>
+                      );
+                    })()}
                     {activeConv.client?.qualificationStatus && (
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -746,14 +984,35 @@ export default function BandejaPage() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     onClick={toggleAi}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border ${
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
                       activeConv.aiEnabled
-                        ? "bg-purple-50 text-purple-800 border-purple-200"
-                        : "bg-slate-100 text-slate-500 border-slate-200"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                        : "bg-purple-600 text-white border-purple-600 hover:bg-purple-700"
                     }`}
+                    title={
+                      activeConv.aiEnabled
+                        ? "Pausa el bot para responder tú personalmente"
+                        : "Devuelve el control automático de este chat al Agente de IA"
+                    }
                   >
-                    <Bot className="w-3.5 h-3.5" />
-                    IA {activeConv.aiEnabled ? "Activa" : "Pausada"}
+                    {activeConv.aiEnabled ? (
+                      <>
+                        <UserCheck className="w-3.5 h-3.5" /> Tomar control
+                      </>
+                    ) : (
+                      <>
+                        <Bot className="w-3.5 h-3.5" /> Devolver al bot
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={syncCrmNow}
+                    disabled={syncingCrm}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 text-[#22115d] border border-indigo-200 hover:bg-indigo-100"
+                    title="La IA lee el chat y actualiza automáticamente etapa Kanban, etiquetas, resumen y citas en Agenda"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${syncingCrm ? "animate-spin" : ""}`} />
+                    {syncingCrm ? "Actualizando..." : "Actualizar CRM"}
                   </button>
                   <button
                     onClick={quoteFromConversation}
@@ -809,11 +1068,19 @@ export default function BandejaPage() {
                             : "bg-white border border-slate-200 text-slate-800"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-4 text-[10px] opacity-80 mb-1">
-                          <span className="font-semibold">
-                            {m.senderName} {m.senderRole === "AI" ? "· Agente IA" : ""}
+                        <div className="flex items-center justify-between gap-4 text-[10px] opacity-90 mb-1">
+                          <span className="font-bold inline-flex items-center gap-1">
+                            {isOutbound ? (
+                              <span className="px-1.5 py-0.2 rounded bg-white/20 text-[9px] uppercase">
+                                {m.senderRole === "AI" ? "BOT" : "AGENTE"}
+                              </span>
+                            ) : null}
+                            {m.senderName}
                           </span>
-                          <span>{m.status}</span>
+                          <span className="inline-flex items-center gap-1 opacity-80">
+                            {formatTimeCR(m.createdAt)}
+                            {isOutbound && <CheckCheck className="w-3 h-3" />}
+                          </span>
                         </div>
                         {m.subject && (
                           <div className="text-xs font-bold mb-1 underline">{m.subject}</div>
@@ -852,16 +1119,42 @@ export default function BandejaPage() {
 
               {/* Composer */}
               <form onSubmit={sendReply} className="p-3 border-t border-slate-200 bg-white space-y-2">
-                <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={suggestAiReply}
-                    disabled={aiDrafting}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    {aiDrafting ? "Redactando con catálogo..." : "Sugerir respuesta con IA"}
-                  </button>
+                {activeConv.channel === "WHATSAPP" && getWhatsAppWindowInfo(activeConv).status === "closed" && (
+                  <div className="px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      <strong>Ventana de 24h cerrada:</strong> WhatsApp requiere usar una <strong>Plantilla Oficial de Meta</strong> para reabrir la conversación.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={openTemplatesModal}
+                      className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold"
+                    >
+                      Abrir Plantillas Meta
+                    </button>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={suggestAiReply}
+                      disabled={aiDrafting}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {aiDrafting ? "Redactando con catálogo..." : "Sugerir respuesta con IA"}
+                    </button>
+                    {activeConv.channel === "WHATSAPP" && (
+                      <button
+                        type="button"
+                        onClick={openTemplatesModal}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl"
+                      >
+                        <LayoutTemplate className="w-3.5 h-3.5" />
+                        Plantillas Meta
+                      </button>
+                    )}
+                  </div>
                   <span className="text-[11px] text-slate-400">
                     Canal: {activeConv.channel}
                   </span>
@@ -1049,6 +1342,137 @@ export default function BandejaPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Send Approved Meta WhatsApp Template (outside 24h window) */}
+      {tplOpen && activeConv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <LayoutTemplate className="w-5 h-5 text-emerald-600" />
+                Plantillas Oficiales de Meta · {activeConv.client?.company || activeConv.subject}
+              </h2>
+              <button onClick={() => setTplOpen(false)} className="p-1 rounded-lg hover:bg-slate-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Envía plantillas aprobadas directamente desde tu cuenta WhatsApp Business (WABA) para contactar clientes incluso cuando ya cerró la ventana de 24 horas.
+            </p>
+
+            {tplError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                {tplError}
+              </div>
+            )}
+
+            {tplLoading ? (
+              <div className="py-8 text-center text-xs text-slate-500">
+                Consultando plantillas aprobadas en tu cuenta Meta Business...
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-2.5">
+                <div className="font-bold">Aún no tienes plantillas propias aprobadas en Meta</div>
+                <p>
+                  Crea tus plantillas en español (ej. <em>seguimiento_proforma</em>, <em>oferta_semanal</em>, <em>posventa</em>) en WhatsApp Manager — Meta suele aprobarlas en 1–2 minutos y aparecerán aquí automáticamente.
+                </p>
+                <a
+                  href="https://business.facebook.com/wa/manage/message-templates/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl"
+                >
+                  Crear Plantilla en WhatsApp Manager <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            ) : (
+              <form onSubmit={sendMetaTemplate} className="space-y-4 text-sm">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1.5">
+                    Selecciona una plantilla aprobada ({templates.length})
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {templates.map((t) => (
+                      <button
+                        type="button"
+                        key={t.id}
+                        onClick={() => selectTemplateItem(t)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                          selectedTpl?.id === t.id
+                            ? "bg-emerald-600 text-white border-emerald-600"
+                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-emerald-50"
+                        }`}
+                      >
+                        {t.name} ({t.language})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedTpl && (
+                  <>
+                    {selectedTpl.variableCount > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-slate-600">
+                          Variables del mensaje ({selectedTpl.variableCount})
+                        </div>
+                        {tplVars.map((val, idx) => (
+                          <div key={idx}>
+                            <label className="text-[11px] text-slate-500">
+                              Variable {`{{${idx + 1}}}`}
+                            </label>
+                            <input
+                              required
+                              value={val}
+                              onChange={(e) => {
+                                const next = [...tplVars];
+                                next[idx] = e.target.value;
+                                setTplVars(next);
+                              }}
+                              placeholder={`Valor para {{${idx + 1}}}`}
+                              className="w-full mt-0.5 px-3 py-2 text-xs border border-slate-200 rounded-xl"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">
+                        Vista previa personalizada ({selectedTpl.category})
+                      </div>
+                      {selectedTpl.headerText && (
+                        <div className="text-xs font-bold text-slate-900">{selectedTpl.headerText}</div>
+                      )}
+                      <p className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">
+                        {renderTemplatePreview(selectedTpl, tplVars)}
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTplOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold border border-slate-200 rounded-xl"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sendingTpl || !selectedTpl}
+                    className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl inline-flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    {sendingTpl ? "Enviando..." : "Enviar Plantilla Oficial"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

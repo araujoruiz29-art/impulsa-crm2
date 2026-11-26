@@ -12,6 +12,7 @@ import {
   findOrCreateWhatsAppConversation,
   mergeDuplicateWhatsAppThreads,
 } from "@/lib/conversation-merge";
+import { syncCrmFromConversation } from "@/lib/crm-autopilot";
 
 // Official Meta Webhook Verification (GET) - Multi-tenant across all workspaces
 export async function GET(req: NextRequest) {
@@ -253,6 +254,11 @@ export async function POST(req: NextRequest) {
                 channel: "WHATSAPP",
               });
             }
+
+            // Silent CRM Autopilot: updates Kanban stage, tags, summary & Agenda tasks even in Manual Mode
+            await syncCrmFromConversation(canonicalConv.id, wsId).catch((e) =>
+              console.error("Silent CRM autopilot webhook error:", e)
+            );
           }
         }
 

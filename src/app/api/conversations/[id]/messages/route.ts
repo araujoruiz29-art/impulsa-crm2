@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCompanySettings, prisma } from "@/lib/prisma";
 import { sendWhatsAppCloudMessage } from "@/lib/meta";
 import { sendCorporateEmail } from "@/lib/email";
+import { syncCrmFromConversation } from "@/lib/crm-autopilot";
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -34,13 +35,17 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "Conversación no encontrada." }, { status: 404 });
     }
 
-    const company = await getCompanySettings();
+    const company = await getCompanySettings(conv.workspaceId);
     let status = "SENT";
     let externalMessageId = "";
     let deliveryInfo = "";
 
     if (conv.channel === "WHATSAPP") {
-      const wa = await sendWhatsAppCloudMessage({ to: conv.externalId, text });
+      const wa = await sendWhatsAppCloudMessage({
+        workspaceId: conv.workspaceId,
+        to: conv.externalId,
+        text,
+      });
       status = wa.simulated ? "SIMULATED" : wa.ok ? "SENT" : "FAILED";
       externalMessageId = wa.externalMessageId || "";
       deliveryInfo = wa.info || wa.error || "";
@@ -79,7 +84,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       },
     });
 
-    return NextResponse.json({ message: msg, deliveryInfo }, { status: 201 });
+    // Silent CRM Autopilot: reads manual seller reply and updates Kanban/tags/Agenda automatically
+    const autopilot = await syncCrmFromConversation(conv.id, conv.workspaceId).catch(() => null);
+
+    return NextResponse.json({ message: msg, deliveryInfo, autopilot }, { status: 201 });
   } catch (err) {
     console.error("Send message error:", err);
     return NextResponse.json({ error: "Error enviando mensaje." }, { status: 500 });
