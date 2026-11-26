@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSessionToken, getAuthConfig, SESSION_COOKIE } from "@/lib/auth";
+import { createSessionToken, getAuthConfig, SESSION_COOKIE, SessionRole } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { WORKSPACE_COOKIE } from "@/lib/workspace";
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       return res;
     }
 
-    // 2. Check registered SaaS company user in database
+    // 2. Check registered SaaS company user (OWNER or AGENT) in database
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !verifyPassword(password, user.passwordHash)) {
       return NextResponse.json(
@@ -44,12 +44,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const role = user.role === "SUPERADMIN" ? "SUPERADMIN" : "OWNER";
-    const firstWorkspace = await prisma.companySettings.findFirst({
-      where: role === "SUPERADMIN" ? undefined : { ownerUserId: user.id },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
+    if (!user.active) {
+      return NextResponse.json(
+        { error: "Tu usuario de vendedor está pausado. Contacta al administrador de tu empresa." },
+        { status: 403 }
+      );
+    }
+
+    const role: SessionRole =
+      user.role === "SUPERADMIN" ? "SUPERADMIN" : user.role === "AGENT" ? "AGENT" : "OWNER";
+
+    let targetWorkspace = null;
+    if (role === "AGENT") {
+      if (user.workspaceId) {
+        targetWorkspace = await prisma.companySettings.findUnique({
+          where: { id: user.workspaceId },
+          select: { id: true, active: true, brandName: true, suspendedReason: true },
+        });
+      }
+    } else if (role === "OWNER") {
+      targetWorkspace = await prisma.companySettings.findFirst({
+        where: { ownerUserId: user.id },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, active: true, brandName: true, suspendedReason: true },
+      });
+    } else {
+      targetWorkspace = await prisma.companySettings.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { id: true, active: true, brandName: true, suspendedReason: true },
+      });
+    }
+
+    if (role !== "SUPERADMIN" && targetWorkspace && !targetWorkspace.active) {
+      return NextResponse.json(
+        {
+          error: `La cuenta de ${targetWorkspace.brandName} se encuentra temporalmente suspendida.${
+            targetWorkspace.suspendedReason ? ` Motivo: ${targetWorkspace.suspendedReason}` : " Contacta a soporte de impulsa CRM."
+          }`,
+        },
+        { status: 403 }
+      );
+    }
 
     const token = await createSessionToken(user.email, user.id, role);
     const res = NextResponse.json({
@@ -65,8 +100,8 @@ export async function POST(req: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 14,
     });
-    if (firstWorkspace) {
-      res.cookies.set(WORKSPACE_COOKIE, firstWorkspace.id, {
+    if (targetWorkspace) {
+      res.cookies.set(WORKSPACE_COOKIE, targetWorkspace.id, {
         httpOnly: false,
         path: "/",
         maxAge: 60 * 60 * 24 * 365,

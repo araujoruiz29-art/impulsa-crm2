@@ -17,13 +17,25 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
 /**
  * Returns the active workspace ID, strictly enforcing multi-tenant ownership:
  * - SUPERADMIN can access any existing workspace (defaults to "default").
- * - Regular OWNER users can ONLY access workspaces where ownerUserId === session.userId.
+ * - AGENT (vendedor) is strictly locked to their assigned user.workspaceId.
+ * - OWNER users can ONLY access workspaces where ownerUserId === session.userId.
  */
 export async function getActiveWorkspaceId(): Promise<string> {
   try {
     const store = await cookies();
     const requestedId = store.get(WORKSPACE_COOKIE)?.value?.trim() || "";
     const session = await verifySessionToken(store.get(SESSION_COOKIE)?.value);
+
+    if (session && session.role === "AGENT") {
+      const agent = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { workspaceId: true, active: true },
+      });
+      if (agent?.active && agent.workspaceId) {
+        return agent.workspaceId;
+      }
+      return `__disabled_${session.userId}`;
+    }
 
     if (session && session.role !== "SUPERADMIN") {
       if (requestedId) {

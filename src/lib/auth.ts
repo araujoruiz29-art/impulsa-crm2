@@ -2,7 +2,7 @@
 
 export const SESSION_COOKIE = "impulsa_session";
 
-export type SessionRole = "SUPERADMIN" | "OWNER";
+export type SessionRole = "SUPERADMIN" | "OWNER" | "AGENT";
 
 export interface AuthSession {
   userId: string;
@@ -56,7 +56,8 @@ export async function verifySessionToken(token: string | undefined): Promise<Aut
     const [userId, email, roleRaw, expStr, sig] = parts;
     const exp = Number(expStr);
     if (!userId || !email || !Number.isFinite(exp) || Date.now() > exp) return null;
-    const role: SessionRole = roleRaw === "SUPERADMIN" ? "SUPERADMIN" : "OWNER";
+    const role: SessionRole =
+      roleRaw === "SUPERADMIN" ? "SUPERADMIN" : roleRaw === "AGENT" ? "AGENT" : "OWNER";
     const expected = await hmacSign(`${userId}|${email}|${role}|${expStr}`, secret);
     if (sig.length !== expected.length) return null;
     let diff = 0;

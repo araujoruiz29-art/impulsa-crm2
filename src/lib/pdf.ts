@@ -140,32 +140,57 @@ export async function generateProformaPdf(quote: QuotePdfData): Promise<Uint8Arr
   const contentW = width - marginX * 2;
   let y = height - 42;
 
-  // 1. Logo (top-left)
-  const logoRel = (company.logoPath || "/brand/image1.png").replace(/^\//, "");
-  const logoAbs = path.join(process.cwd(), "public", logoRel);
-  if (fs.existsSync(logoAbs)) {
+  // 1. Logo (top-left) — supports Data URI upload (PNG/JPG), remote HTTPS URL, or /public path
+  let logoEmbedded = false;
+  const rawLogo = (company.logoPath || "").trim();
+  const logoCandidate = rawLogo || (company.id === "default" ? "/brand/image1.png" : "");
+  if (logoCandidate) {
     try {
-      const logoBytes = fs.readFileSync(logoAbs);
-      const logoImg = await pdfDoc.embedPng(logoBytes);
-      const targetW = 195;
-      const scale = targetW / logoImg.width;
-      const targetH = logoImg.height * scale;
-      page.drawImage(logoImg, {
-        x: marginX,
-        y: y - targetH + 8,
-        width: targetW,
-        height: targetH,
-      });
+      let logoBytes: Uint8Array | null = null;
+      let isJpg = false;
+
+      if (logoCandidate.startsWith("data:image/")) {
+        const match = logoCandidate.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/i);
+        if (match) {
+          isJpg = match[1].toLowerCase() !== "png";
+          logoBytes = Uint8Array.from(Buffer.from(match[2], "base64"));
+        }
+      } else if (/^https?:\/\//i.test(logoCandidate)) {
+        const resp = await fetch(logoCandidate);
+        if (resp.ok) {
+          const ct = (resp.headers.get("content-type") || "").toLowerCase();
+          isJpg = ct.includes("jpeg") || ct.includes("jpg") || /\.jpe?g($|\?)/i.test(logoCandidate);
+          logoBytes = new Uint8Array(await resp.arrayBuffer());
+        }
+      } else {
+        const logoRel = logoCandidate.replace(/^\//, "");
+        const logoAbs = path.join(process.cwd(), "public", logoRel);
+        if (fs.existsSync(logoAbs)) {
+          isJpg = /\.jpe?g$/i.test(logoAbs);
+          logoBytes = fs.readFileSync(logoAbs);
+        }
+      }
+
+      if (logoBytes) {
+        const logoImg = isJpg ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
+        const maxW = 195;
+        const maxH = 44;
+        const scale = Math.min(maxW / logoImg.width, maxH / logoImg.height);
+        const targetW = logoImg.width * scale;
+        const targetH = logoImg.height * scale;
+        page.drawImage(logoImg, {
+          x: marginX,
+          y: y - targetH + 8,
+          width: targetW,
+          height: targetH,
+        });
+        logoEmbedded = true;
+      }
     } catch {
-      page.drawText(safePdfText(company.brandName), {
-        x: marginX,
-        y: y - 18,
-        size: 18,
-        font: fontBold,
-        color: bluePrimary,
-      });
+      logoEmbedded = false;
     }
-  } else {
+  }
+  if (!logoEmbedded) {
     page.drawText(safePdfText(company.brandName), {
       x: marginX,
       y: y - 18,

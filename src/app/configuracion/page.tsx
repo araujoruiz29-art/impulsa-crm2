@@ -13,7 +13,48 @@ import {
   RefreshCw,
   Plus,
   Trash2,
+  Users,
+  Crown,
+  Upload,
+  KeyRound,
+  Power,
 } from "lucide-react";
+
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  createdAt: string;
+}
+
+interface AdminCompanyRow {
+  id: string;
+  brandName: string;
+  companyName: string;
+  email: string;
+  phone: string;
+  active: boolean;
+  plan: string;
+  suspendedReason: string;
+  createdAt: string;
+  ownerEmail: string;
+  ownerName: string;
+  ownerUserId: string;
+  stats: {
+    clientsCount: number;
+    conversationsCount: number;
+    quotesCount: number;
+    agentsCount: number;
+  };
+  connections: {
+    whatsapp: boolean;
+    social: boolean;
+    email: boolean;
+    ai: boolean;
+  };
+}
 
 interface BankAccount {
   bank: string;
@@ -41,26 +82,86 @@ interface EmailAccountItem {
 }
 
 export default function ConfiguracionPage() {
-  const [tab, setTab] = useState<"company" | "email" | "meta" | "ai" | "backup">("company");
+  const [tab, setTab] = useState<"company" | "email" | "meta" | "ai" | "backup" | "team" | "admin">("company");
   const [company, setCompany] = useState<Record<string, unknown>>({});
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [integrations, setIntegrations] = useState<Record<string, unknown>>({});
   const [emailAccounts, setEmailAccounts] = useState<EmailAccountItem[]>([]);
+  const [userRole, setUserRole] = useState<string>("OWNER");
+  const [teamOwner, setTeamOwner] = useState<TeamMember | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [canManageTeam, setCanManageTeam] = useState(true);
+  const [newSeller, setNewSeller] = useState({ name: "", email: "", password: "" });
+  const [adminCompanies, setAdminCompanies] = useState<AdminCompanyRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [testing, setTesting] = useState(false);
   const [testWaPhone, setTestWaPhone] = useState("8449-1975");
 
+  const loadAdminCompanies = async () => {
+    const r = await fetch("/api/admin/companies");
+    if (r.ok) {
+      const d = await r.json();
+      setAdminCompanies(d.companies || []);
+    }
+  };
+
+  const loadTeam = async () => {
+    const r = await fetch("/api/team");
+    if (r.ok) {
+      const d = await r.json();
+      setTeamOwner(d.owner || null);
+      setTeamMembers(d.members || []);
+      setCanManageTeam(Boolean(d.canManage));
+    }
+  };
+
   const load = async () => {
-    const [res, accRes] = await Promise.all([
+    const [res, accRes, wsRes] = await Promise.all([
       fetch("/api/settings"),
       fetch("/api/email-accounts"),
+      fetch("/api/workspaces"),
     ]);
-    const [data, accData] = await Promise.all([res.json(), accRes.json()]);
+    const [data, accData, wsData] = await Promise.all([res.json(), accRes.json(), wsRes.json()]);
     setCompany(data.company || {});
     setBankAccounts(data.company?.bankAccounts || []);
     setIntegrations(data.integrations || {});
     setEmailAccounts(accData.accounts || []);
+    const role = String(wsData?.role || "OWNER");
+    setUserRole(role);
+    loadTeam();
+    if (role === "SUPERADMIN") {
+      loadAdminCompanies();
+    }
+  };
+
+  const handleLogoUpload = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setStatusMsg("❌ Selecciona un archivo de imagen PNG, JPG o WebP.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 420;
+        const maxH = 140;
+        const scale = Math.min(1, maxW / img.width, maxH / img.height);
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/png");
+        setCompany((prev) => ({ ...prev, logoPath: dataUrl }));
+        setStatusMsg("✅ Logo cargado. Haz clic en «Guardar Configuración» abajo para aplicarlo en tus Proformas PDF.");
+      };
+      img.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
   };
 
   useEffect(() => {
@@ -209,7 +310,11 @@ export default function ConfiguracionPage() {
           { id: "email", label: "Correo SMTP / IMAP", icon: Mail },
           { id: "meta", label: "Meta Cloud API & WhatsApp", icon: MessageCircle },
           { id: "ai", label: "Agente de IA", icon: Bot },
+          { id: "team", label: "Equipo y Vendedores", icon: Users },
           { id: "backup", label: "Respaldos y Nube", icon: ShieldCheck },
+          ...(userRole === "SUPERADMIN"
+            ? [{ id: "admin", label: "Admin Compañías (SaaS)", icon: Crown }]
+            : []),
         ].map((t) => {
           const Icon = t.icon;
           return (
@@ -276,14 +381,43 @@ export default function ConfiguracionPage() {
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-600">Ruta o URL del Logotipo</label>
-                <input
-                  value={String(company.logoPath || "")}
-                  onChange={(e) => setCompany({ ...company, logoPath: e.target.value })}
-                  placeholder="/brand/image1.png"
-                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
-                />
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-600 block">
+                  Logotipo de la Empresa (sale en Proformas PDF)
+                </label>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {String(company.logoPath || "").trim() ? (
+                    <img
+                      src={String(company.logoPath)}
+                      alt="Logo empresa"
+                      className="h-10 max-w-[140px] object-contain bg-white border border-slate-200 rounded-lg p-1"
+                    />
+                  ) : (
+                    <span className="text-[11px] text-slate-400 italic">Sin logo</span>
+                  )}
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0070C0] hover:bg-[#005a9e] text-white text-xs font-bold rounded-lg cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" /> Subir Logo
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleLogoUpload(f);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {String(company.logoPath || "").trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setCompany({ ...company, logoPath: "" })}
+                      className="px-2 py-1.5 text-[11px] font-semibold bg-white border border-slate-200 text-rose-600 rounded-lg hover:bg-rose-50"
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1292,7 +1426,364 @@ export default function ConfiguracionPage() {
           </div>
         )}
 
-        {tab !== "backup" && tab !== "email" && (
+        {/* TAB 6: TEAM & SELLERS */}
+        {tab === "team" && (
+          <div className="space-y-5 text-sm">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                Equipo y Vendedores de {String(company.brandName || "tu Empresa")}
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Crea cuentas individuales para tus vendedores. Cada vendedor inicia sesión con su propio correo y contraseña, y solo puede ver y trabajar dentro de esta empresa.
+              </p>
+            </div>
+
+            {teamOwner && (
+              <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-200 flex items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="font-bold text-[#22115d]">{teamOwner.name || "Dueño"}</span>{" "}
+                  <span className="text-slate-600">({teamOwner.email})</span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full bg-[#22115d] text-white font-bold text-[10px]">
+                  DUEÑO / ADMIN
+                </span>
+              </div>
+            )}
+
+            {canManageTeam && (
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="text-xs font-bold text-slate-800">+ Agregar nuevo vendedor</div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <input
+                    value={newSeller.name}
+                    onChange={(e) => setNewSeller({ ...newSeller, name: e.target.value })}
+                    placeholder="Nombre (ej. María Pérez)"
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+                  />
+                  <input
+                    type="email"
+                    value={newSeller.email}
+                    onChange={(e) => setNewSeller({ ...newSeller, email: e.target.value })}
+                    placeholder="correo@empresa.com"
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+                  />
+                  <input
+                    type="password"
+                    value={newSeller.password}
+                    onChange={(e) => setNewSeller({ ...newSeller, password: e.target.value })}
+                    placeholder="Contraseña (mín. 6 caracteres)"
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+                  />
+                  <button
+                    type="button"
+                    disabled={testing}
+                    onClick={async () => {
+                      setTesting(true);
+                      setStatusMsg("");
+                      try {
+                        const r = await fetch("/api/team", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(newSeller),
+                        });
+                        const d = await r.json();
+                        if (r.ok) {
+                          setNewSeller({ name: "", email: "", password: "" });
+                          setStatusMsg(`✅ Vendedor "${d.member.name}" creado. Ya puede iniciar sesión en /login.`);
+                          await loadTeam();
+                        } else {
+                          setStatusMsg(`❌ ${d.error}`);
+                        }
+                      } finally {
+                        setTesting(false);
+                      }
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#0070C0] hover:bg-[#005a9e] text-white text-xs font-bold rounded-xl"
+                  >
+                    <Plus className="w-4 h-4" /> Crear vendedor
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {teamMembers.map((m) => (
+                <div
+                  key={m.id}
+                  className="p-3.5 rounded-xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-3"
+                >
+                  <div>
+                    <div className="font-bold text-slate-900 flex items-center gap-2">
+                      <span>{m.name}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          m.active ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-700"
+                        }`}
+                      >
+                        {m.active ? "ACTIVO" : "PAUSADO"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500">{m.email} · Rol: Vendedor</div>
+                  </div>
+                  {canManageTeam && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const r = await fetch("/api/team", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: m.id, active: !m.active }),
+                          });
+                          if (r.ok) {
+                            setStatusMsg(
+                              m.active ? `⏸️ Vendedor "${m.name}" pausado.` : `✅ Vendedor "${m.name}" reactivado.`
+                            );
+                            loadTeam();
+                          }
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg"
+                      >
+                        {m.active ? "Pausar acceso" : "Reactivar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const np = prompt(`Nueva contraseña para ${m.name} (mínimo 6 caracteres):`);
+                          if (!np || np.length < 6) return;
+                          const r = await fetch("/api/team", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: m.id, newPassword: np }),
+                          });
+                          if (r.ok) setStatusMsg(`✅ Contraseña actualizada para ${m.name}.`);
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-sky-50 hover:bg-sky-100 text-[#0070C0] rounded-lg"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" /> Clave
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm(`¿Eliminar el acceso del vendedor "${m.name}" (${m.email})?`)) return;
+                          const r = await fetch(`/api/team?id=${encodeURIComponent(m.id)}`, { method: "DELETE" });
+                          if (r.ok) {
+                            setStatusMsg(`🗑️ Vendedor "${m.name}" eliminado.`);
+                            loadTeam();
+                          }
+                        }}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
+                        title="Eliminar vendedor"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {teamMembers.length === 0 && (
+                <div className="p-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-2xl">
+                  Aún no hay vendedores adicionales en esta empresa. Usa el formulario superior para crear accesos para tu equipo.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: SUPERADMIN SAAS COMPANIES CONTROL PANEL */}
+        {tab === "admin" && userRole === "SUPERADMIN" && (
+          <div className="space-y-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-[#22115d] flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-amber-500" /> Panel SuperAdmin · Compañías Registradas ({adminCompanies.length})
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Control centralizado de todas las empresas en impulsa CRM: planes, conexiones activas, uso real y botón para suspender o reactivar accesos por suscripción.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={loadAdminCompanies}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Actualizar lista
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {adminCompanies.map((c) => (
+                <div
+                  key={c.id}
+                  className={`p-4 rounded-2xl border space-y-3 ${
+                    c.active
+                      ? "bg-white border-slate-200"
+                      : "bg-rose-50/60 border-rose-200"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold text-slate-900 text-sm">{c.brandName}</span>
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                            c.active
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-rose-600 text-white"
+                          }`}
+                        >
+                          {c.active ? "● ACTIVA" : "⛔ SUSPENDIDA"}
+                        </span>
+                        <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                          {c.id}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {c.companyName} · Dueño: <strong>{c.ownerEmail || "N/D"}</strong>
+                        {c.phone ? ` · Tel: ${c.phone}` : ""}
+                      </div>
+                      {!c.active && c.suspendedReason && (
+                        <div className="text-xs text-rose-700 font-semibold mt-1">
+                          Motivo suspensión: {c.suspendedReason}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={c.plan}
+                        onChange={async (e) => {
+                          const plan = e.target.value;
+                          const r = await fetch("/api/admin/companies", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: c.id, plan }),
+                          });
+                          if (r.ok) {
+                            setStatusMsg(`✅ Plan de "${c.brandName}" actualizado a ${plan}.`);
+                            loadAdminCompanies();
+                          }
+                        }}
+                        className="px-2.5 py-1.5 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg"
+                      >
+                        <option value="BASICO">Plan BÁSICO</option>
+                        <option value="PRO">Plan PRO</option>
+                        <option value="ENTERPRISE">Plan ENTERPRISE</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await fetch("/api/workspaces", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ workspaceId: c.id }),
+                          });
+                          window.location.reload();
+                        }}
+                        className="px-3 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-[#22115d] rounded-lg"
+                      >
+                        Entrar al espacio
+                      </button>
+
+                      {c.ownerUserId && c.ownerUserId !== "superadmin" && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const np = prompt(`Nueva contraseña para el dueño de "${c.brandName}" (${c.ownerEmail}):`);
+                            if (!np || np.length < 6) return;
+                            const r = await fetch("/api/admin/companies", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: c.id, resetOwnerPassword: np }),
+                            });
+                            if (r.ok) setStatusMsg(`✅ Contraseña restablecida para ${c.ownerEmail}.`);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-sky-50 hover:bg-sky-100 text-[#0070C0] rounded-lg"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" /> Clave
+                        </button>
+                      )}
+
+                      {c.id !== "default" && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const nextActive = !c.active;
+                            let reason = "";
+                            if (!nextActive) {
+                              const input = prompt(
+                                `Motivo de suspensión para "${c.brandName}" (opcional, ej. Mensualidad pendiente):`,
+                                "Mensualidad pendiente"
+                              );
+                              if (input === null) return;
+                              reason = input;
+                            }
+                            const r = await fetch("/api/admin/companies", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                id: c.id,
+                                active: nextActive,
+                                suspendedReason: nextActive ? "" : reason,
+                              }),
+                            });
+                            if (r.ok) {
+                              setStatusMsg(
+                                nextActive
+                                  ? `✅ Compañía "${c.brandName}" reactivada.`
+                                  : `⛔ Compañía "${c.brandName}" suspendida.`
+                              );
+                              loadAdminCompanies();
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg ${
+                            c.active
+                              ? "bg-rose-600 hover:bg-rose-700 text-white"
+                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          }`}
+                        >
+                          <Power className="w-3.5 h-3.5" /> {c.active ? "Suspender" : "Activar"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] pt-2 border-t border-slate-100">
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
+                      👥 {c.stats.clientsCount} clientes
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
+                      💬 {c.stats.conversationsCount} chats
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
+                      📄 {c.stats.quotesCount} proformas
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
+                      🧑‍💼 {c.stats.agentsCount} vendedores
+                    </span>
+                    <span className="ml-auto flex items-center gap-1.5">
+                      <span className={`px-2 py-0.5 rounded font-bold ${c.connections.whatsapp ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-400"}`}>
+                        WA
+                      </span>
+                      <span className={`px-2 py-0.5 rounded font-bold ${c.connections.social ? "bg-indigo-100 text-indigo-800" : "bg-slate-100 text-slate-400"}`}>
+                        FB/IG
+                      </span>
+                      <span className={`px-2 py-0.5 rounded font-bold ${c.connections.email ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-400"}`}>
+                        Mail
+                      </span>
+                      <span className={`px-2 py-0.5 rounded font-bold ${c.connections.ai ? "bg-purple-100 text-purple-800" : "bg-slate-100 text-slate-400"}`}>
+                        IA
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab !== "backup" && tab !== "email" && tab !== "team" && tab !== "admin" && (
           <div className="flex justify-end pt-3 border-t border-slate-100">
             <button
               type="submit"

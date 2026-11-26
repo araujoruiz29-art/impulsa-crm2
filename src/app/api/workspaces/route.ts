@@ -6,10 +6,12 @@ export async function GET() {
   const session = await getCurrentSession();
   const activeId = await getActiveWorkspaceId();
 
-  // Strict multi-tenant isolation: OWNER sees ONLY their own companies; SUPERADMIN sees all
+  // Strict multi-tenant isolation: AGENT sees only assigned company; OWNER sees only owned companies; SUPERADMIN sees all
   const companies = await prisma.companySettings.findMany({
     where:
-      session && session.role !== "SUPERADMIN"
+      session && session.role === "AGENT"
+        ? { id: activeId }
+        : session && session.role !== "SUPERADMIN"
         ? { ownerUserId: session.userId }
         : undefined,
     orderBy: { createdAt: "asc" },
@@ -53,6 +55,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getCurrentSession();
+    if (session?.role === "AGENT") {
+      return NextResponse.json(
+        { error: "Solo el dueño o administrador puede crear nuevas empresas." },
+        { status: 403 }
+      );
+    }
     const ownerUserId = session?.role === "SUPERADMIN" || !session ? "superadmin" : session.userId;
 
     const body = await req.json();
