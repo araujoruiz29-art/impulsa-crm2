@@ -168,7 +168,7 @@ export default function ManualPage() {
               <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-100">
                 <div className="font-bold text-purple-900 mb-1">IA Y SISTEMA</div>
                 <p className="text-slate-600 leading-relaxed">
-                  10. Conocimiento y Docs · 11. Agente IA y Reglas · 12. Conexiones, Empresa, Respaldos y Limpieza
+                  10. Conocimiento y Docs · 11. Agente IA y Reglas · 11B. Campañas y Ciclo 1-7-90 · 12. Conexiones, Empresa y Respaldos
                 </p>
               </div>
             </div>

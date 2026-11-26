@@ -24,7 +24,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     group: "NAVEGACIÓN GENERAL",
     summary:
       "Es la estructura principal de impulsa CRM. Desde aquí cambias de módulo, buscas contactos, revisas el estado de tus integraciones y cambias entre empresas si manejas más de un negocio.",
-    tip: "Cada empresa creada desde el selector superior es 100% independiente: tiene sus propios contactos, proformas PDF, correos, WhatsApp, catálogo y Agente de IA.",
+    tip: "Cada empresa creada desde el selector superior (o registrada desde /login?mode=register) es 100% independiente y privada: tiene sus propios contactos, proformas PDF, correos, WhatsApp, catálogo y Agente de IA.",
     buttons: [
       {
         control: "Buscar contacto o proforma...",
@@ -38,6 +38,12 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Muestran si la base de datos, WhatsApp Business, Correo SMTP/IMAP y Gemini IA están activos. Al hacer clic te llevan directo a Conexiones y empresa.",
       },
       {
+        control: "Manual de Uso",
+        location: "Menú izquierdo (sección IA y Sistema)",
+        purpose:
+          "Abre esta guía completa con 2 pestañas (Manual de Uso y Manual Interno de Conexiones) lista para imprimir o guardar como PDF.",
+      },
+      {
         control: "Cerrar sesión (ícono puerta)",
         location: "Esquina inferior izquierda",
         purpose:
@@ -47,13 +53,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         control: "Selector de Empresa (Caminante Corporativo ▾)",
         location: "Barra superior derecha",
         purpose:
-          "Permite cambiar entre empresas registradas o crear una nueva empresa independiente con el botón «+ Crear nueva empresa».",
-      },
-      {
-        control: "+ Nueva Proforma",
-        location: "Barra superior derecha (botón morado)",
-        purpose:
-          "Acceso directo desde cualquier pantalla para crear una nueva Factura Proforma PDF.",
+          "Permite cambiar entre tus empresas registradas o crear una nueva empresa independiente con el botón «+ Crear nueva empresa».",
       },
     ],
   },
@@ -64,8 +64,8 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     route: "/",
     group: "TU ESPACIO",
     summary:
-      "Vista ejecutiva en tiempo real del negocio: monto en negociación, proformas enviadas y ganadas, mensajes sin leer, avisos de compra urgentes y tareas del día.",
-    tip: "Es la primera pantalla que conviene revisar cada mañana: en menos de 1 minuto ves si hay clientes listos para comprar o mensajes pendientes.",
+      "Vista ejecutiva en tiempo real del negocio: monto en negociación, proformas enviadas y ganadas, mensajes sin leer, avisos de compra urgentes y tareas del día. Excluye automáticamente contactos marcados como Compañero/Agente o Proveedor (Sin IA) para que tus métricas reflejen solo clientes reales.",
+    tip: "Es la primera pantalla que conviene revisar cada mañana: en menos de 1 minuto ves si hay clientes listos para comprar o mensajes pendientes. La tarjeta de «Puesta en marcha» se oculta sola en cuanto WhatsApp y Correo están conectados.",
     buttons: [
       {
         control: "Actualizar",
@@ -90,12 +90,6 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Atajos inmediatos para cotizar o atender a un cliente que el Agente de IA marcó como listo para comprar.",
       },
       {
-        control: "Puesta en marcha (5 pasos)",
-        location: "Panel derecho superior",
-        purpose:
-          "Lista de verificación que confirma si tu empresa, correos, WhatsApp, documentos e IA están listos.",
-      },
-      {
         control: "Círculo de tarea pendiente",
         location: "Bloque de tareas del tablero",
         purpose: "Marca una tarea o llamada como completada en 1 clic.",
@@ -109,50 +103,62 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     route: "/bandeja",
     group: "TU ESPACIO",
     summary:
-      "Centraliza en una sola pantalla todos los mensajes entrantes y salientes de WhatsApp Business (+506 8449-1975), Correo Corporativo (ventas@ y uniformes@), Messenger e Instagram, asistidos por el Agente de IA.",
-    tip: "Cuando un cliente envía una nota de voz por WhatsApp, la IA la transcribe y responde automáticamente. Si envía la foto de un zapato, la IA lo identifica en elcaminantecr.com/tienda/ y responde con precio y tallas en tiempo real por sucursal (Ciudad Quesada, La Fortuna y Online).",
+      "Centraliza en una sola pantalla todos los mensajes entrantes y salientes de WhatsApp Business (+506 8449-1975), Correo Corporativo (ventas@ y uniformes@), Messenger e Instagram, asistidos por el Agente de IA. Unifica automáticamente hilos del mismo número de WhatsApp para evitar chats duplicados.",
+    tip: "Si activas «🆕 IA: Solo Clientes Nuevos», el bot atenderá únicamente a prospectos nuevos (etapa Nuevo Lead) sin intervenir en clientes existentes. Y para compañeros de trabajo o agentes, toca «👥 Compañero · Sin IA» una sola vez para apagarles la IA para siempre.",
     buttons: [
       {
         control: "IA Automática: ACTIVA / Modo Manual Total (IA Apagada)",
-        location: "Barra superior derecha (interruptor global)",
+        location: "Barra superior derecha (interruptor maestro)",
         purpose:
-          "Interruptor maestro en 1 clic: en «Modo Manual Total» apaga las respuestas automáticas del bot en TODOS los chats (tú respondes todo a mano o con Borrador IA). Al volver a hacer clic reactivas la IA automática 24/7.",
+          "Interruptor global en 1 clic: en «Modo Manual Total» apaga las respuestas automáticas del bot en TODOS los chats (tú respondes todo a mano o con Borrador IA). Al volver a hacer clic reactivas la IA automática 24/7.",
+      },
+      {
+        control: "IA: Todos los Clientes / 🆕 IA: Solo Clientes Nuevos",
+        location: "Barra superior derecha (junto al interruptor maestro)",
+        purpose:
+          "Controla el alcance de la IA: en modo «Solo Clientes Nuevos», la IA responde únicamente a contactos tipo Cliente en etapa «Nuevo Lead». Si el cliente ya pasó a Contactado, Cotizado, Seguimiento o Ganado (o ya existía en Contactos con otra etapa), la IA no le contesta sola.",
+      },
+      {
+        control: "👥 Compañero · Sin IA / ✅ Es Compañero (Sin IA)",
+        location: "Encabezado del chat abierto",
+        purpose:
+          "Marca en 1 clic a compañeros de trabajo, agentes o proveedores: apaga la IA de forma permanente para ese número (ni texto ni fotos), evita Avisos al vendedor, los saca de Ventas Kanban y del Tablero, y los protege de Campañas y del Ciclo 1-7-90 mientras tú chateas normal con ellos.",
       },
       {
         control: "Sincronizar Correo IMAP",
         location: "Barra superior derecha",
         purpose:
-          "Descarga los correos nuevos de ventas@elcaminantecr.com y uniformes@elcaminantecr.com directo a la bandeja.",
+          "Descarga los correos nuevos de ventas@elcaminantecr.com y uniformes@elcaminantecr.com directo a su pestaña correspondiente.",
       },
       {
-        control: "Foto Zapato → Stock",
+        control: "Buscar por Foto · Stock",
         location: "Barra superior derecha",
         purpose:
-          "Abre el buscador visual: sube la foto de cualquier zapato para identificar el modelo exacto, precio y tallas disponibles por sucursal en elcaminantecr.com/tienda/.",
-      },
-      {
-        control: "Probar Audio WhatsApp",
-        location: "Barra superior derecha",
-        purpose:
-          "Permite probar internamente la transcripción de notas de voz y la calificación automática de intención de compra.",
-      },
-      {
-        control: "Simular WhatsApp / Lead Meta",
-        location: "Barra superior derecha",
-        purpose:
-          "Herramienta de prueba para simular un mensaje entrante de WhatsApp o Lead de Meta Ads sin usar un teléfono real.",
+          "Buscador visual universal: sube la foto de cualquier artículo (calzado, ropa, gorras, mochilas, balones o accesorios) para identificar el modelo exacto, precio y disponibilidad real por sucursal en elcaminantecr.com/tienda/.",
       },
       {
         control: "Pestañas separadas por canal y correo + «Acomodar conexiones»",
         location: "Debajo del encabezado",
         purpose:
-          "Separa automáticamente cada buzón de correo corporativo en su propia bandeja (ej. ventas@ y uniformes@ por separado, nunca revueltos) junto a WhatsApp, Messenger e Instagram. Con el botón «Acomodar conexiones» puedes cambiar el orden (← / →) u ocultar canales que aún no uses.",
+          "Separa automáticamente cada buzón corporativo en su propia bandeja (ej. ventas@ y uniformes@ por separado, nunca revueltos) junto a WhatsApp, Messenger e Instagram. Con «Acomodar conexiones» puedes reordenar (← / →) u ocultar canales que no uses.",
       },
       {
-        control: "Tomar control / Devolver al bot + Reloj 24h + Actualizar CRM + Plantillas Meta",
+        control: "Tomar control (👤 AGENTE) / Devolver al bot (🤖)",
+        location: "Encabezado del chat abierto",
+        purpose:
+          "«Tomar control» pausa el bot solo en ese chat para atención humana directa; «Devolver al bot» reactiva la IA en esa conversación. Cada burbuja indica si respondió BOT o AGENTE, la hora y doble check ✓✓.",
+      },
+      {
+        control: "Reloj 24h de WhatsApp + Plantillas Meta",
         location: "Encabezado y barra inferior del chat",
         purpose:
-          "«Tomar control» cambia el chat a modo AGENTE y «Devolver al bot» reactiva la IA. El Reloj 24h muestra cuántas horas gratis quedan (con aviso antes de cerrarse). «Actualizar CRM» analiza el chat con IA para mover solo el Kanban, etiquetas y citas en Agenda. «Plantillas Meta» envía plantillas aprobadas fuera de las 24h.",
+          "El Reloj 24h indica cuánto tiempo gratis queda desde el último mensaje del cliente (🟢 abierta / 🟠 menos de 4h / 🔴 cerrada). Cuando se cierra la ventana de 24h, «Plantillas Meta» te permite reabrir el chat enviando una plantilla oficial aprobada.",
+      },
+      {
+        control: "Actualizar CRM (Piloto Automático IA)",
+        location: "Encabezado del chat abierto",
+        purpose:
+          "Analiza silenciosamente la conversación con IA para actualizar la etapa del Kanban, etiquetas, valor estimado, [Resumen IA] y crear tareas automáticas en Agenda. También corre en segundo plano al recibir o enviar mensajes.",
       },
       {
         control: "Cotizar con IA",
@@ -161,14 +167,10 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Lee los mensajes del cliente y te lleva directo a Nueva Proforma con los datos y productos pre-extraídos automáticamente.",
       },
       {
-        control: "WhatsApp (enlace externo)",
+        control: "WhatsApp (enlace externo) / Eliminar conversación (🗑️)",
         location: "Encabezado del chat abierto",
-        purpose: "Abre la conversación directamente en WhatsApp Web / Desktop.",
-      },
-      {
-        control: "Eliminar conversación (🗑️)",
-        location: "Encabezado del chat abierto",
-        purpose: "Borra esa conversación individual y sus mensajes (pide confirmación).",
+        purpose:
+          "Abre la conversación directo en WhatsApp Web/Desktop, o borra ese chat individual (pide confirmación).",
       },
       {
         control: "Sugerencia IA (Borrador) / Enviar",
@@ -185,13 +187,14 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     route: "/avisos",
     group: "TU ESPACIO",
     summary:
-      "Bandeja prioritaria de alertas de venta caliente. Cada vez que el Agente de IA detecta señales claras de compra (cantidades, pedido, solicitud de proforma o SINPE), pausa automáticamente el bot y crea un aviso aquí.",
+      "Bandeja prioritaria de alertas de venta caliente. Cada vez que el Agente de IA detecta señales claras de compra (cantidades, pedido, solicitud de proforma o SINPE), pausa automáticamente el bot y crea un aviso aquí. Los contactos marcados como Compañero/Agente o Proveedor (Sin IA) nunca generan avisos.",
     tip: "Este módulo garantiza que nunca se pierda un cierre: el bot atiende las consultas iniciales y te entrega el cliente listo para facturar.",
     buttons: [
       {
-        control: "Actualizar",
+        control: "Actualizar / Limpiar resueltos",
         location: "Arriba a la derecha",
-        purpose: "Refresca la lista de avisos urgentes pendientes.",
+        purpose:
+          "Refresca la lista de avisos pendientes o depura en 1 clic todos los avisos que ya marcaste como resueltos.",
       },
       {
         control: "Crear Proforma PDF",
@@ -206,15 +209,16 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Te lleva directamente a esa conversación en la Bandeja para responderle personalmente al cliente.",
       },
       {
-        control: "Marcar Atendido",
+        control: "Resuelto + Reactivar IA / Solo Marcar Resuelto",
         location: "Dentro de cada tarjeta de aviso",
         purpose:
-          "Mueve la alerta a la sección de «Avisos atendidos» y baja el contador rojo del menú lateral.",
+          "«Resuelto + Reactivar IA» cierra el aviso y vuelve a encender el bot en ese chat; «Solo Marcar Resuelto» cierra el aviso dejando el chat en modo manual (AGENTE).",
       },
       {
-        control: "Reabrir",
-        location: "En la lista de avisos atendidos",
-        purpose: "Devuelve un aviso ya resuelto a pendientes si requiere nuevo seguimiento.",
+        control: "Reabrir / Eliminar (🗑️)",
+        location: "En cada aviso resuelto o pendiente",
+        purpose:
+          "Devuelve un aviso resuelto a pendientes si requiere nuevo seguimiento, o borra un aviso individual.",
       },
     ],
   },
@@ -225,74 +229,86 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     route: "/embudo",
     group: "TU ESPACIO",
     summary:
-      "Tablero visual por columnas (Nuevo, Contactado, Cotizado, Seguimiento, Ganado y Perdido) con el monto total en colones acumulado en cada etapa.",
-    tip: "Puedes arrastrar y soltar cualquier tarjeta con el mouse hacia otra columna, o cambiar la etapa desde el selector dentro de la tarjeta.",
+      "Tablero visual por columnas (Nuevo, Contactado, Cotizado, Seguimiento, Ganado y Perdido) con el monto total en colones acumulado en cada etapa y panel completo de vista previa deslizable. Excluye automáticamente contactos internos (Compañeros/Proveedores Sin IA).",
+    tip: "Haz clic sobre cualquier tarjeta para abrir su panel completo a la derecha (chat reciente, proformas, tareas y edición rápida de monto, etiquetas y notas) sin salir del tablero.",
     buttons: [
       {
-        control: "+ Gestionar Clientes",
-        location: "Arriba a la derecha",
-        purpose: "Abre el directorio completo de contactos para agregar o editar clientes.",
+        control: "Kanban ↔ Lista completa",
+        location: "Barra superior de herramientas",
+        purpose:
+          "Alterna entre el tablero visual por columnas y una vista de tabla completa ideal para revisar todos los negocios sin desplazamiento horizontal.",
       },
       {
-        control: "Selector de etapa en la tarjeta",
-        location: "Parte inferior izquierda de cada tarjeta",
-        purpose: "Cambia la etapa comercial del cliente sin necesidad de arrastrar.",
+        control: "Ocultar columnas vacías",
+        location: "Barra superior de herramientas",
+        purpose:
+          "Esconde temporalmente las etapas sin clientes para concentrar la pantalla solo en las columnas activas.",
       },
       {
-        control: "Ícono hoja (Nueva Proforma)",
-        location: "Parte inferior derecha de cada tarjeta",
-        purpose: "Crea una proforma PDF nueva directamente para ese cliente.",
+        control: "Buscador, filtros rápidos por etapa y flechas (← / →)",
+        location: "Barra de filtros del embudo",
+        purpose:
+          "Filtra tarjetas por nombre, empresa o etiqueta, enfoca una sola etapa o desplaza el tablero lateralmente en un clic.",
       },
       {
-        control: "Ícono burbuja (WhatsApp)",
-        location: "Parte inferior derecha de cada tarjeta",
-        purpose: "Abre un chat de WhatsApp directo con el teléfono del cliente.",
+        control: "Clic en tarjeta (Panel de Vista Previa Completa)",
+        location: "Cualquier tarjeta del tablero",
+        purpose:
+          "Abre un panel lateral deslizable con el resumen del cliente, últimos mensajes del chat, proformas PDF, tareas de agenda y edición directa de etapa, valor estimado, etiquetas y notas.",
+      },
+      {
+        control: "Arrastrar tarjeta / Selector de etapa / Proforma / WhatsApp",
+        location: "En cada tarjeta y panel lateral",
+        purpose:
+          "Permite mover negocios de etapa arrastrando o desde el selector, crear una proforma PDF o abrir WhatsApp directo.",
       },
     ],
   },
   {
     id: "contactos",
     number: "06",
-    title: "Contactos (Base de Datos de Clientes)",
+    title: "Contactos (Clientes, Compañeros y Proveedores)",
     route: "/clientes",
     group: "TU ESPACIO",
     summary:
-      "Directorio centralizado de empresas y compradores. Guarda razón social, contacto, teléfono, WhatsApp, correo, dirección, etapa, vendedor asignado, notas internas e historial de proformas.",
+      "Directorio centralizado de clientes, compañeros/agentes internos y proveedores. Guarda razón social, contacto, tipo de contacto, teléfono, WhatsApp, correo, dirección, etapa, vendedor asignado, notas internas e historial de proformas.",
+    tip: "Puedes registrar de antemano los números de WhatsApp de tus compañeros, agentes de ventas y proveedores con «Tipo de Contacto → Compañero / Agente (Sin IA)» para que el bot nunca les responda ni desde su primer mensaje.",
     buttons: [
       {
-        control: "Importar CSV",
+        control: "Importar CSV / Exportar CSV",
         location: "Arriba a la derecha",
         purpose:
-          "Carga clientes masivamente desde una hoja de cálculo guardada como archivo .csv.",
-      },
-      {
-        control: "Exportar CSV",
-        location: "Arriba a la derecha",
-        purpose:
-          "Descarga toda tu base de clientes filtrada en formato Excel/CSV.",
+          "Carga contactos masivamente desde una hoja de cálculo (.csv) o descarga tu base filtrada en formato Excel/CSV.",
       },
       {
         control: "+ Nuevo Cliente",
         location: "Arriba a la derecha (botón azul)",
-        purpose: "Abre el formulario para registrar manualmente un cliente nuevo.",
+        purpose:
+          "Abre el formulario para registrar manualmente un cliente, compañero/agente interno o proveedor.",
+      },
+      {
+        control: "Tipo de Contacto (Cliente / Compañero·Agente Sin IA / Proveedor Sin IA)",
+        location: "Dentro del formulario y en el filtro superior",
+        purpose:
+          "Define si la persona es un Cliente comercial o un contacto interno/proveedor excluido de la IA, Avisos, Kanban, Tablero y Campañas. El selector superior permite ver cada grupo por separado.",
       },
       {
         control: "Buscar / Filtros de Etapa y Origen",
         location: "Barra de filtros",
         purpose:
-          "Busca por empresa, nombre, teléfono, correo o etiqueta, y filtra por etapa del embudo o canal de origen.",
+          "Busca por empresa, nombre, teléfono, correo o etiqueta, y filtra por tipo de contacto, etapa del embudo o canal de origen.",
       },
       {
         control: "Clic en una fila (Ficha del Cliente)",
-        location: "Tabla de clientes",
+        location: "Tabla de contactos",
         purpose:
           "Abre el panel de detalle con todas las proformas emitidas a ese cliente y un campo para agregar notas internas al historial.",
       },
       {
         control: "Acciones de fila (Proforma / Editar ✏️ / Eliminar 🗑️)",
-        location: "Columna derecha de cada cliente",
+        location: "Columna derecha de cada contacto",
         purpose:
-          "Permiten crearle una proforma, actualizar sus datos o borrarlo de la base de datos.",
+          "Permiten crearle una proforma, cambiar sus datos o tipo de contacto, o borrarlo de la base de datos.",
       },
     ],
   },
@@ -303,7 +319,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     route: "/agenda",
     group: "TU ESPACIO",
     summary:
-      "Combina tu calendario de seguimientos (tareas, llamadas, WhatsApp y correos) con dos reportes gerenciales en vivo: desempeño por vendedor y rendimiento por canal de origen.",
+      "Combina tu calendario de seguimientos (tareas, llamadas, WhatsApp y correos —incluidos los detectados automáticamente por el Piloto Automático IA—) con dos reportes gerenciales en vivo: desempeño por vendedor y rendimiento por canal de origen.",
     buttons: [
       {
         control: "Formulario «Programar Cita, Llamada o Seguimiento»",
@@ -405,10 +421,10 @@ export const MANUAL_SECTIONS: ManualSection[] = [
       "Almacena tus productos y servicios (Uniformes, Bordados, Artículos Promocionales, Artículos Deportivos, Zapatos de Seguridad) con precio regular, costo y precio al por mayor para insertarlos en segundos en las proformas.",
     buttons: [
       {
-        control: "Buscar Zapato por Foto (Stock Web)",
+        control: "Buscar por Foto · Stock Web",
         location: "Arriba a la derecha (botón morado)",
         purpose:
-          "Sube o pega la foto de un zapato para consultar al instante el modelo, precio y tallas disponibles por sucursal en elcaminantecr.com/tienda/.",
+          "Sube o pega la foto de cualquier artículo (calzado, ropa, gorras, mochilas, balones o accesorios) para consultar al instante el modelo, precio y existencias por sucursal en elcaminantecr.com/tienda/.",
       },
       {
         control: "Vaciar Catálogo",
@@ -515,13 +531,13 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     group: "IA Y SISTEMA",
     summary:
       "Permite enviar campañas masivas de WhatsApp sin riesgo de bloqueo usando la API Oficial de Meta y Plantillas aprobadas, y gestionar secuencias multi-día («Ciclo 1-7-90») para que ningún cliente que dijo «lo voy a pensar» se enfríe.",
-    tip: "Las campañas excluyen automáticamente a clientes con opt-out (no molestar), y las secuencias 1-7-90 se detienen solas en cuanto el cliente responde o compra.",
+    tip: "Las campañas y el Ciclo 1-7-90 excluyen automáticamente a clientes con opt-out (no molestar) y a todos los Compañeros/Agentes o Proveedores (Sin IA). Además, las secuencias 1-7-90 se detienen solas en cuanto el cliente responde o compra.",
     buttons: [
       {
         control: "Pestaña 1 · Campañas Masivas (API Oficial)",
         location: "Selector superior",
         purpose:
-          "Filtra contactos por etapa Kanban o etiqueta, elige una plantilla aprobada de Meta, personaliza con {{contacto}} / {{empresa}}, revisa la vista previa y envía con reporte de entregados.",
+          "Filtra solo clientes comerciales por etapa Kanban o etiqueta, elige una plantilla aprobada de Meta, personaliza con {{contacto}} / {{empresa}}, revisa la vista previa y envía con reporte de entregados.",
       },
       {
         control: "Pestaña 2 · Secuencias Ciclo 1-7-90",
@@ -538,7 +554,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     route: "/configuracion",
     group: "IA Y SISTEMA",
     summary:
-      "Centro técnico y administrativo del CRM. Permite personalizar los datos legales de la proforma, gestionar múltiples cuentas de correo, configurar WhatsApp Cloud API, ajustar la IA y respaldar o limpiar datos.",
+      "Centro técnico y administrativo del CRM. Permite personalizar los datos legales de la proforma, gestionar múltiples cuentas de correo, configurar WhatsApp Cloud API, ajustar el alcance y personalidad de la IA y respaldar o limpiar datos.",
     buttons: [
       {
         control: "Pestaña 1 · Empresa y Proforma",
@@ -556,19 +572,19 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         control: "Pestaña 3 · Meta Cloud API & WhatsApp",
         location: "Tercera pestaña",
         purpose:
-          "Muestra la URL del Webhook (con botón Copiar), guarda el Token Permanente, Phone Number ID y WABA ID. Incluye «Verificar Conexión Meta», «Enviar WhatsApp Prueba (hello_world)» y «Enviar Texto Libre».",
+          "Muestra la URL del Webhook (con botón Copiar), guarda el Token Permanente, Phone Number ID y WABA ID. Incluye «Verificar Conexión Meta», «Enviar WhatsApp Prueba» y «Enviar Texto Libre».",
       },
       {
         control: "Pestaña 4 · Agente de IA",
         location: "Cuarta pestaña",
         purpose:
-          "Interruptor global entre «Respuesta Manual Total» e «IA Automática 24/7», configuración de API Key de Gemini, botón «Probar Conexión IA (Gemini)», personalidad/tono de respuesta del bot, base de conocimiento y plantillas editables para fotos de zapatos.",
+          "Controla el interruptor global («IA Automática 24/7» vs «Modo Manual Total»), el Alcance de la IA («Solo Clientes Nuevos» vs «Todos los Clientes»), API Key de Gemini, botón «Probar Conexión IA», personalidad del bot y plantillas editables para búsquedas por foto.",
       },
       {
         control: "Pestaña 5 · Respaldos y Nube",
         location: "Quinta pestaña",
         purpose:
-          "«Descargar Migración Completa (JSON)» guarda copia total de seguridad. «Subir archivo de respaldo JSON» restaura datos. El bloque 3 («Limpieza de Datos de Prueba») borra chats no-correo y/o catálogo manteniendo intactos correos, clientes, proformas y horarios.",
+          "«Descargar Migración Completa (JSON)» guarda copia total de seguridad. «Subir archivo de respaldo JSON» restaura datos. El bloque de Limpieza permite borrar chats de prueba, vaciar catálogo o limpiar el tablero Kanban de pruebas de forma segura.",
       },
       {
         control: "Guardar Configuración",
@@ -583,12 +599,12 @@ export const DAILY_ROUTINE = [
   {
     step: "1. Revisar Avisos al Vendedor",
     detail:
-      "Entra a «Avisos al vendedor» al iniciar el día. Ahí están los clientes que ya pidieron cotización, tallas o pago por SINPE (el bot ya pausó su respuesta para que tú cierres).",
+      "Entra a «Avisos al vendedor» al iniciar el día. Ahí están los clientes que ya pidieron cotización, tallas o pago por SINPE (el bot ya pausó su respuesta para que tú cierres). Al terminar, usa «Resuelto + Reactivar IA» o «Solo Marcar Resuelto».",
   },
   {
-    step: "2. Sincronizar Correos y Responder Bandeja",
+    step: "2. Sincronizar Correos y Controlar la IA en Bandeja",
     detail:
-      "En «Conversaciones», haz clic en «Sincronizar Correo IMAP» para traer correos nuevos de ventas@ y uniformes@, y atiende cualquier chat donde el cliente necesite atención humana.",
+      "En «Conversaciones», haz clic en «Sincronizar Correo IMAP» para traer correos de ventas@ y uniformes@. Verifica si prefieres «🆕 IA: Solo Clientes Nuevos» activo, y marca cualquier compañero o agente con «👥 Compañero · Sin IA» para que el bot nunca le responda.",
   },
   {
     step: "3. Emitir y Enviar Proformas PDF",
@@ -596,9 +612,9 @@ export const DAILY_ROUTINE = [
       "Desde el mismo chat usa «Cotizar con IA» o abre «Cotizaciones PDF → Nueva Proforma», revisa precios e IVA 13%, y envía el PDF en 1 clic por Correo o WhatsApp.",
   },
   {
-    step: "4. Actualizar Embudo y Agenda",
+    step: "4. Revisar Ventas Kanban y Seguimientos 1-7-90",
     detail:
-      "Mueve tus negocios en «Ventas · Kanban» (Cotizado → Seguimiento → Ganado) y agenda llamadas clave en «Agenda y reportes» para no dejar ningún presupuesto frío.",
+      "Haz clic en tus negocios en «Ventas · Kanban» para ver su panel completo (chat, proformas y tareas), cambia a «Lista completa» si lo prefieres, y mantén activos tus seguimientos en «Agenda» o «Campañas y Ciclo 1-7-90».",
   },
   {
     step: "5. Mantener Horarios y Políticas al Día",
