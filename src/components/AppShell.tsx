@@ -25,6 +25,7 @@ import {
   Plus,
   LogOut,
   FileQuestion,
+  Megaphone,
 } from "lucide-react";
 
 interface WorkspaceSummary {
@@ -64,6 +65,7 @@ const NAV_GROUPS = [
     title: "IA Y SISTEMA",
     items: [
       { href: "/conocimiento", label: "Conocimiento y docs", icon: BookOpen },
+      { href: "/campanas", label: "Campañas y Ciclo 1-7-90", icon: Megaphone },
       { href: "/automatizaciones", label: "Agente IA y reglas", icon: Bot },
       { href: "/configuracion", label: "Conexiones y empresa", icon: Settings },
       { href: "/manual", label: "Manual de uso", icon: FileQuestion },

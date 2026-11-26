@@ -149,10 +149,10 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Separa automáticamente cada buzón de correo corporativo en su propia bandeja (ej. ventas@ y uniformes@ por separado, nunca revueltos) junto a WhatsApp, Messenger e Instagram. Con el botón «Acomodar conexiones» puedes cambiar el orden (← / →) u ocultar canales que aún no uses.",
       },
       {
-        control: "IA Activa / IA Pausada",
-        location: "Encabezado del chat abierto",
+        control: "Tomar control / Devolver al bot + Reloj 24h + Actualizar CRM + Plantillas Meta",
+        location: "Encabezado y barra inferior del chat",
         purpose:
-          "Enciende o pausa al bot de IA únicamente para esa conversación. Cuando tú tomas el chat personalmente, conviene dejarla en «IA Pausada».",
+          "«Tomar control» cambia el chat a modo AGENTE y «Devolver al bot» reactiva la IA. El Reloj 24h muestra cuántas horas gratis quedan (con aviso antes de cerrarse). «Actualizar CRM» analiza el chat con IA para mover solo el Kanban, etiquetas y citas en Agenda. «Plantillas Meta» envía plantillas aprobadas fuera de las 24h.",
       },
       {
         control: "Cotizar con IA",
@@ -504,6 +504,30 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         control: "Interruptor Activa / Pausada y Eliminar (🗑️)",
         location: "Lista de reglas (columna derecha)",
         purpose: "Enciende, apaga o elimina cada automatización y muestra cuántas veces se ha ejecutado.",
+      },
+    ],
+  },
+  {
+    id: "campanas",
+    number: "11B",
+    title: "Campañas Masivas Seguras y Ciclo 1-7-90",
+    route: "/campanas",
+    group: "IA Y SISTEMA",
+    summary:
+      "Permite enviar campañas masivas de WhatsApp sin riesgo de bloqueo usando la API Oficial de Meta y Plantillas aprobadas, y gestionar secuencias multi-día («Ciclo 1-7-90») para que ningún cliente que dijo «lo voy a pensar» se enfríe.",
+    tip: "Las campañas excluyen automáticamente a clientes con opt-out (no molestar), y las secuencias 1-7-90 se detienen solas en cuanto el cliente responde o compra.",
+    buttons: [
+      {
+        control: "Pestaña 1 · Campañas Masivas (API Oficial)",
+        location: "Selector superior",
+        purpose:
+          "Filtra contactos por etapa Kanban o etiqueta, elige una plantilla aprobada de Meta, personaliza con {{contacto}} / {{empresa}}, revisa la vista previa y envía con reporte de entregados.",
+      },
+      {
+        control: "Pestaña 2 · Secuencias Ciclo 1-7-90",
+        location: "Selector superior",
+        purpose:
+          "Crea en 1 clic la secuencia de 9 pasos (Días 1, 3, 4, 5, 7 + Nutrición 15, 30, 60 y 90 días), permite editar cada paso, asignar plantillas Meta, inscribir clientes o etapas completas y ejecutar envíos pendientes.",
       },
     ],
   },

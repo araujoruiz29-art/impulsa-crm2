@@ -215,6 +215,18 @@ export async function POST(req: NextRequest) {
               })) || conv;
             const targetClientId = canonicalConv.clientId || client.id;
 
+            // Auto-stop any active 1-7-90 follow-up sequence since the customer replied!
+            await prisma.sequenceEnrollment
+              .updateMany({
+                where: {
+                  workspaceId: wsId,
+                  clientId: targetClientId,
+                  status: "ACTIVA",
+                },
+                data: { status: "DETENIDA_RESPUESTA" },
+              })
+              .catch(() => {});
+
             await qualifyLeadAndNotifySeller({
               clientId: targetClientId,
               conversationId: canonicalConv.id,

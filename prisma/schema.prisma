@@ -342,3 +342,69 @@ model EmailAccount {
   @@unique([workspaceId, email])
   @@index([workspaceId])
 }
+
+model Campaign {
+  id               String    @id @default(cuid())
+  workspaceId      String    @default("default")
+  name             String
+  templateName     String
+  templateLanguage String    @default("es")
+  templatePreview  String    @default("")
+  variablesJson    String    @default("[]")
+  targetStage      String    @default("ALL")
+  targetTag        String    @default("")
+  status           String    @default("COMPLETADA")
+  totalCount       Int       @default(0)
+  sentCount        Int       @default(0)
+  failedCount      Int       @default(0)
+  skippedOptOut    Int       @default(0)
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  @@index([workspaceId])
+}
+
+model FollowUpSequence {
+  id          String               @id @default(cuid())
+  workspaceId String               @default("default")
+  name        String
+  description String               @default("")
+  trigger     String               @default("QUOTE_SENT")
+  active      Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  steps       SequenceStep[]
+  enrollments SequenceEnrollment[]
+
+  @@index([workspaceId])
+}
+
+model SequenceStep {
+  id               String           @id @default(cuid())
+  sequenceId       String
+  sequence         FollowUpSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  stepOrder        Int              @default(0)
+  dayOffset        Int              @default(1)
+  phase            String           @default("CORTO") // "CORTO" (1-7 dias) | "LARGO" (15-90 dias)
+  title            String
+  messageText      String
+  templateName     String           @default("")
+  templateLanguage String           @default("es")
+}
+
+model SequenceEnrollment {
+  id               String           @id @default(cuid())
+  workspaceId      String           @default("default")
+  sequenceId       String
+  sequence         FollowUpSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  clientId         String
+  status           String           @default("ACTIVA") // "ACTIVA" | "PAUSADA" | "DETENIDA_RESPUESTA" | "COMPLETADA"
+  currentStepIndex Int              @default(0)
+  nextRunAt        DateTime         @default(now())
+  lastSentAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([sequenceId, clientId])
+  @@index([workspaceId])
+}
