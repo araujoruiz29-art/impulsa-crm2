@@ -17,8 +17,57 @@ import {
   RefreshCw,
   LayoutTemplate,
   Save,
+  TrendingUp,
+  Copy,
 } from "lucide-react";
-import { CLIENT_STAGES, formatDateCR } from "@/lib/format";
+import { CLIENT_STAGES, formatDateCR, formatMoney } from "@/lib/format";
+
+interface MetaAdCampaignItem {
+  id: string;
+  name: string;
+  status: string;
+  effectiveStatus: string;
+  objective: string;
+  dailyBudget: number;
+  lifetimeBudget: number;
+  createdTime: string;
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  ctr: number;
+  leadsOrMessages: number;
+}
+
+interface CrmMetaAttribution {
+  totalLeads: number;
+  metaAdsCount: number;
+  facebookCount: number;
+  instagramCount: number;
+  hotBuyersCount: number;
+  wonCount: number;
+  pipelineValue: number;
+  wonValue: number;
+  recentLeads: Array<{
+    id: string;
+    company: string;
+    contactName: string;
+    source: string;
+    stage: string;
+    estimatedValue: number;
+    qualificationStatus: string;
+    metaCampaign: string;
+    createdAt: string;
+  }>;
+}
+
+interface AdCopyVariation {
+  angle: string;
+  headline: string;
+  primaryText: string;
+  cta: string;
+  targetingTip: string;
+}
 
 interface MetaTemplate {
   id: string;
@@ -91,9 +140,36 @@ interface ClientSimple {
 }
 
 export default function CampanasPage() {
-  const [tab, setTab] = useState<"campanas" | "secuencias">("campanas");
+  const [tab, setTab] = useState<"campanas" | "secuencias" | "meta_ads">("campanas");
   const [banner, setBanner] = useState("");
   const [errorBanner, setErrorBanner] = useState("");
+
+  // Tab 3: Meta Ads (Facebook & Instagram Paid Campaigns)
+  const [adsLoading, setAdsLoading] = useState(false);
+  const [adsConfigured, setAdsConfigured] = useState(false);
+  const [adAccountId, setAdAccountId] = useState("");
+  const [adsWarning, setAdsWarning] = useState("");
+  const [adsCurrency, setAdsCurrency] = useState("CRC");
+  const [adCampaigns, setAdCampaigns] = useState<MetaAdCampaignItem[]>([]);
+  const [crmAttr, setCrmAttr] = useState<CrmMetaAttribution>({
+    totalLeads: 0,
+    metaAdsCount: 0,
+    facebookCount: 0,
+    instagramCount: 0,
+    hotBuyersCount: 0,
+    wonCount: 0,
+    pipelineValue: 0,
+    wonValue: 0,
+    recentLeads: [],
+  });
+  const [togglingAdId, setTogglingAdId] = useState<string | null>(null);
+  const [adCopyForm, setAdCopyForm] = useState({
+    productOrPromo: "",
+    objective: "Mensajes a WhatsApp / Instagram",
+    audience: "Empresas y clientes en Costa Rica",
+  });
+  const [generatingCopy, setGeneratingCopy] = useState(false);
+  const [adVariations, setAdVariations] = useState<AdCopyVariation[]>([]);
 
   // Shared Meta approved templates
   const [templates, setTemplates] = useState<MetaTemplate[]>([]);
@@ -153,10 +229,73 @@ export default function CampanasPage() {
     setClients(data.clients || []);
   };
 
+  const loadMetaAds = async () => {
+    setAdsLoading(true);
+    try {
+      const res = await fetch("/api/meta/ads");
+      const data = await res.json();
+      setAdsConfigured(Boolean(data.configured));
+      setAdAccountId(String(data.adAccountId || ""));
+      setAdsWarning(String(data.warning || ""));
+      setAdsCurrency(String(data.currency || "CRC"));
+      setAdCampaigns(Array.isArray(data.adCampaigns) ? data.adCampaigns : []);
+      if (data.crmAttribution) setCrmAttr(data.crmAttribution);
+    } catch {
+      // ignore
+    } finally {
+      setAdsLoading(false);
+    }
+  };
+
+  const toggleAdStatus = async (ad: MetaAdCampaignItem) => {
+    const nextStatus = ad.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    setTogglingAdId(ad.id);
+    setBanner("");
+    setErrorBanner("");
+    try {
+      const res = await fetch("/api/meta/ads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: ad.id, status: nextStatus }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBanner(data.message || "Estado actualizado.");
+        await loadMetaAds();
+      } else {
+        setErrorBanner(data.error || "No se pudo cambiar el estado.");
+      }
+    } finally {
+      setTogglingAdId(null);
+    }
+  };
+
+  const generateAdCopy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeneratingCopy(true);
+    setErrorBanner("");
+    try {
+      const res = await fetch("/api/meta/ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(adCopyForm),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdVariations(data.variations || []);
+      } else {
+        setErrorBanner(data.error || "No se pudo generar el anuncio.");
+      }
+    } finally {
+      setGeneratingCopy(false);
+    }
+  };
+
   useEffect(() => {
     loadTemplates();
     loadCampaigns();
     loadSequences();
+    loadMetaAds();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -347,6 +486,21 @@ export default function CampanasPage() {
           >
             <GitBranch className="w-4 h-4" />
             2. Secuencias Ciclo 1-7-90 ({sequences.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTab("meta_ads");
+              loadMetaAds();
+            }}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl transition ${
+              tab === "meta_ads"
+                ? "bg-gradient-to-r from-indigo-600 to-pink-600 text-white shadow-xs"
+                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            3. Anuncios FB &amp; IG ({adCampaigns.length})
           </button>
         </div>
       </div>
@@ -1099,6 +1253,339 @@ export default function CampanasPage() {
               );
             })
           )}
+        </div>
+      )}
+
+      {/* ==================== TAB 3: META ADS (FACEBOOK & INSTAGRAM) ==================== */}
+      {tab === "meta_ads" && (
+        <div className="space-y-6">
+          {/* Top action bar + Quick links to Meta Ads Manager & Business Suite */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-pink-600" />
+                Anuncios de Facebook e Instagram (Meta Ads + Resultados en CRM)
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Monitorea el rendimiento de tus anuncios pagados, pausa o activa campañas en 1 clic, mide cuántos leads reales llegaron al CRM y crea textos de anuncios con Gemini IA.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={loadMetaAds}
+                disabled={adsLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${adsLoading ? "animate-spin" : ""}`} />
+                Actualizar
+              </button>
+              <a
+                href={
+                  adAccountId
+                    ? `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${encodeURIComponent(
+                        adAccountId.replace(/^act_/, "")
+                      )}`
+                    : "https://adsmanager.facebook.com"
+                }
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#22115d] hover:bg-indigo-900 text-white text-xs font-bold rounded-xl shadow-xs"
+              >
+                + Crear Anuncio en Meta Ads
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <a
+                href="https://business.facebook.com/latest/composer"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-800 text-xs font-bold rounded-xl"
+              >
+                Publicar / Historias FB &amp; IG
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+
+          {/* CRM Attribution KPIs from Meta Ads / Facebook / Instagram */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+              <div className="text-[11px] font-bold uppercase text-slate-400">Prospectos FB / IG / Ads</div>
+              <div className="text-2xl font-extrabold text-slate-900 mt-1">{crmAttr.totalLeads}</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                Ads: {crmAttr.metaAdsCount} · Messenger: {crmAttr.facebookCount} · IG: {crmAttr.instagramCount}
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-rose-200 p-4">
+              <div className="text-[11px] font-bold uppercase text-rose-600">🔥 Intención Compra Real</div>
+              <div className="text-2xl font-extrabold text-rose-700 mt-1">{crmAttr.hotBuyersCount}</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Clasificados por IA en bandeja</div>
+            </div>
+            <div className="bg-white rounded-2xl border border-emerald-200 p-4">
+              <div className="text-[11px] font-bold uppercase text-emerald-700">Ventas Ganadas (Meta)</div>
+              <div className="text-2xl font-extrabold text-emerald-700 mt-1">{crmAttr.wonCount}</div>
+              <div className="text-[11px] text-emerald-800 font-semibold mt-0.5">
+                {formatMoney(crmAttr.wonValue, adsCurrency)} cerrados
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-sky-200 p-4">
+              <div className="text-[11px] font-bold uppercase text-[#0070C0]">Cartera Activa Meta</div>
+              <div className="text-2xl font-extrabold text-[#22115d] mt-1">
+                {formatMoney(crmAttr.pipelineValue, adsCurrency)}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">En negociación en Ventas Kanban</div>
+            </div>
+          </div>
+
+          {/* Live Meta Ads API Campaigns Table */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Campañas Activas / Pausadas en Meta Ads Manager (últimos 30 días)
+                </h3>
+                {adAccountId && (
+                  <p className="text-[11px] text-slate-500">
+                    Cuenta publicitaria conectada: <code className="font-mono font-bold">{adAccountId}</code>
+                  </p>
+                )}
+              </div>
+              {!adsConfigured && (
+                <a
+                  href="/configuracion"
+                  className="px-3 py-1.5 bg-indigo-50 text-[#22115d] text-xs font-bold rounded-xl border border-indigo-200 hover:bg-indigo-100"
+                >
+                  Conectar Meta Ad Account ID →
+                </a>
+              )}
+            </div>
+
+            {adsWarning && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950">
+                <strong>Nota de conexión Meta Ads:</strong> {adsWarning}
+              </div>
+            )}
+
+            {adCampaigns.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-left text-[11px] uppercase text-slate-500 border-b border-slate-200">
+                      <th className="py-2.5 px-3">Campaña</th>
+                      <th className="py-2.5 px-3">Estado</th>
+                      <th className="py-2.5 px-3 text-right">Presupuesto/día</th>
+                      <th className="py-2.5 px-3 text-right">Gasto 30d</th>
+                      <th className="py-2.5 px-3 text-right">Alcance</th>
+                      <th className="py-2.5 px-3 text-right">Clics (CTR)</th>
+                      <th className="py-2.5 px-3 text-right">Leads / Msgs</th>
+                      <th className="py-2.5 px-3 text-right">Control</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {adCampaigns.map((ad) => {
+                      const isActive = ad.status === "ACTIVE";
+                      return (
+                        <tr key={ad.id} className="hover:bg-slate-50/70">
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-900">{ad.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {ad.objective || "META_ADS"} · ID {ad.id}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span
+                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                isActive
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {isActive ? "● ACTIVA" : "⏸ PAUSADA"}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right font-medium text-slate-700">
+                            {ad.dailyBudget > 0 ? ad.dailyBudget.toLocaleString("es-CR", { minimumFractionDigits: 2 }) : "—"}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-slate-900">
+                            {ad.spend.toLocaleString("es-CR", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-3 text-right text-slate-600">
+                            {ad.reach.toLocaleString("es-CR")}
+                          </td>
+                          <td className="py-3 px-3 text-right text-slate-600">
+                            {ad.clicks.toLocaleString("es-CR")}{" "}
+                            <span className="text-[10px] text-slate-400">({ad.ctr.toFixed(2)}%)</span>
+                          </td>
+                          <td className="py-3 px-3 text-right font-extrabold text-[#0070C0]">
+                            {ad.leadsOrMessages}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              type="button"
+                              disabled={togglingAdId === ad.id}
+                              onClick={() => toggleAdStatus(ad)}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                                isActive
+                                  ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+                                  : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                              }`}
+                            >
+                              {isActive ? (
+                                <>
+                                  <Pause className="w-3 h-3" /> Pausar
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="w-3 h-3" /> Activar
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                No se encontraron campañas publicitarias en esta cuenta todavía. Conecta tu <strong>Meta Ad Account ID</strong> en <em>Conexiones y empresa → Meta Cloud API</em> o crea tu primer anuncio con el botón superior.
+              </div>
+            )}
+          </div>
+
+          {/* AI Ad Copy Generator + Recent Meta Leads */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <form
+              onSubmit={generateAdCopy}
+              className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4 text-xs"
+            >
+              <div>
+                <h3 className="text-sm font-bold text-[#22115d] flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  Generador IA de Anuncios para Facebook e Instagram
+                </h3>
+                <p className="text-slate-500 mt-0.5">
+                  Describe lo que quieres promocionar y Gemini redacta 3 variaciones listas para copiar y pegar en Meta Ads Manager (orientadas a generar mensajes directos a tu CRM).
+                </p>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="font-semibold text-slate-700">¿Qué producto, servicio o promoción vas a anunciar? *</label>
+                  <input
+                    required
+                    value={adCopyForm.productOrPromo}
+                    onChange={(e) => setAdCopyForm({ ...adCopyForm, productOrPromo: e.target.value })}
+                    placeholder="Ej. Camisas polo corporativas con logo bordado desde 12 unidades con envío a todo el país"
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-semibold text-slate-700">Objetivo del anuncio</label>
+                    <select
+                      value={adCopyForm.objective}
+                      onChange={(e) => setAdCopyForm({ ...adCopyForm, objective: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                    >
+                      <option>Mensajes a WhatsApp / Instagram</option>
+                      <option>Formulario de Leads (Meta Lead Ads)</option>
+                      <option>Mensajes a Facebook Messenger</option>
+                      <option>Tráfico a tienda web / catálogo</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700">Público objetivo</label>
+                    <input
+                      value={adCopyForm.audience}
+                      onChange={(e) => setAdCopyForm({ ...adCopyForm, audience: e.target.value })}
+                      className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={generatingCopy}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  {generatingCopy ? "Redactando anuncios con IA..." : "Generar 3 Anuncios con IA"}
+                </button>
+              </div>
+
+              {adVariations.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  {adVariations.map((v, i) => (
+                    <div key={i} className="p-3.5 rounded-xl bg-purple-50/60 border border-purple-200 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-extrabold text-purple-900">
+                          Opción {i + 1} · {v.angle}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(
+                              `${v.headline}\n\n${v.primaryText}\n\nBotón: ${v.cta}`
+                            );
+                            setBanner(`📋 Opción ${i + 1} copiada lista para pegar en Meta Ads Manager.`);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-purple-200 text-purple-800 rounded-lg font-bold text-[10px] hover:bg-purple-100"
+                        >
+                          <Copy className="w-3 h-3" /> Copiar texto
+                        </button>
+                      </div>
+                      <div className="font-bold text-slate-900">Título: {v.headline}</div>
+                      <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{v.primaryText}</p>
+                      <div className="text-[11px] text-slate-600 pt-1 border-t border-purple-100">
+                        <strong>Botón CTA:</strong> {v.cta} · <strong>Tip segmentación:</strong> {v.targetingTip}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </form>
+
+            {/* Recent Meta Leads in CRM */}
+            <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+              <h3 className="text-sm font-bold text-slate-900">
+                Últimos clientes llegados desde FB / IG / Ads ({crmAttr.recentLeads.length})
+              </h3>
+              <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                {crmAttr.recentLeads.map((cl) => (
+                  <div
+                    key={cl.id}
+                    className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 truncate">{cl.company}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {cl.source} · {cl.stage}
+                        {cl.metaCampaign ? ` · ${cl.metaCampaign}` : ""}
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
+                        cl.qualificationStatus === "LISTO_PARA_COMPRAR" ||
+                        cl.qualificationStatus === "CALIENTE"
+                          ? "bg-rose-100 text-rose-800"
+                          : "bg-sky-100 text-sky-800"
+                      }`}
+                    >
+                      {cl.qualificationStatus === "LISTO_PARA_COMPRAR" ||
+                      cl.qualificationStatus === "CALIENTE"
+                        ? "🔥 COMPRA"
+                        : "💬 CONSULTA"}
+                    </span>
+                  </div>
+                ))}
+                {crmAttr.recentLeads.length === 0 && (
+                  <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    Aún no han entrado leads desde anuncios de Facebook o Instagram en esta empresa.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
