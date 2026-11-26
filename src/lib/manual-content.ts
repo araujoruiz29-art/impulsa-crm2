@@ -567,6 +567,54 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
+    id: "guia-anuncios",
+    number: "11C",
+    title: "Guía Paso a Paso: Cómo Crear y Publicar Anuncios en Facebook e Instagram (Sin Terceros)",
+    route: "/campanas (Pestaña 3)",
+    group: "IA Y SISTEMA",
+    summary:
+      "Receta práctica paso a paso para que cualquier persona del equipo pueda grabar un Reel en tienda, lanzar la campaña pagada en Facebook e Instagram y medir resultados en colones (₡) sin depender de agencias externas.",
+    tip: "Antes de publicar tu primer anuncio, verifica en Meta Business Suite que tu Cuenta Publicitaria esté verificada («Verificar ahora») y con tarjeta activa, y que tu Meta Ad Account ID (ej. act_...) esté guardado en Conexiones y empresa → Meta Cloud API.",
+    buttons: [
+      {
+        control: "Paso 1 · Crear el Guion y Tomas con IA (2 min)",
+        location: "Campañas → 3. Anuncios FB & IG → Estudio IA de Guiones",
+        purpose:
+          "Escribe el producto o promoción, elige Formato A (Asesor en tienda + acercamientos, 25 seg), Formato B (Solo manos y producto sin rostro, 15 seg) o Formato C (Promo / Temporada), y presiona «Crear Guion + Tomas + Caption con IA». El sistema te entrega el guion hablado, las tomas exactas, textos en pantalla sin faltas de ortografía, la descripción (Caption), hashtags locales y la palabra clave para DM.",
+      },
+      {
+        control: "Paso 2 · Grabar el Video en Tienda con el Celular (10 min)",
+        location: "En tu tienda física (formato vertical 9:16)",
+        purpose:
+          "Graba siempre en vertical (9:16), con buena luz de frente (limpia el lente del celular). Si usas Formato A, usa camiseta de la empresa + micrófono de solapa y graba 3 tomas cortas de acercamiento al producto/etiqueta/suela. Si usas Formato B, gira el producto lento en tus manos mostrando los detalles clave.",
+      },
+      {
+        control: "Paso 3 · Subtítulos Rápidos y Revisión (3 min)",
+        location: "App CapCut (gratis en celular o PC)",
+        purpose:
+          "Une las tomas en CapCut (máximo 15–25 segundos), activa «Subtítulos automáticos» grandes y legibles, coloca arriba el texto gancho generado por el CRM y revisa SIEMPRE la ortografía antes de exportar en 1080p.",
+      },
+      {
+        control: "Paso 4 · Crear la Campaña y Segmentación desde el CRM (1 min)",
+        location: "Campañas → 3. Anuncios FB & IG → «Crear Campaña Directo en Meta Ads»",
+        purpose:
+          "Pon nombre claro (ej. «Garmin Mensajes San Carlos Nov»), elige Objetivo «Conversaciones / Mensajes» (recomendado para cerrar ventas por WhatsApp/IG), presupuesto inicial de ₡3.000/día, zona (Ciudad Quesada + La Fortuna, Solo La Fortuna, GAM o Costa Rica) y edades (18–55). Al pulsar «Crear Campaña», queda creada en Meta Ads en estado PAUSADA.",
+      },
+      {
+        control: "Paso 5 · Subir el Video en Meta Ads Manager y Encender (2 min)",
+        location: "Botón «+ Crear Anuncio en Meta Ads» (arriba en Pestaña 3)",
+        purpose:
+          "Abre tu campaña pausada en Meta Ads Manager → nivel «Anuncio» → sube el video exportado de CapCut → pega el Caption y Título que copiaste del CRM → selecciona el botón «Enviar mensaje por WhatsApp» (o Instagram/Messenger) y publica. También puedes encender o pausar la campaña en 1 clic desde tu tabla en impulsa CRM.",
+      },
+      {
+        control: "Paso 6 · Medir Resultados y Dejar que la IA Cierre (días 1 a 7)",
+        location: "Tabla de Anuncios en /campanas + /bandeja",
+        purpose:
+          "Revisa cada 3 días el «Costo / Resultado» en tu CRM: un costo entre ₡100 y ₡400 por conversación es excelente (si supera ₡800–₡1.000 tras 4 días sin ventas, pausa ese anuncio y graba otro gancho). Mientras corre, tu Agente de IA responde mensajes y comentarios («Precio», «Ubicación»), filtra «🔥 Compra real» y agenda seguimientos en Ventas Kanban automáticamente.",
+      },
+    ],
+  },
+  {
     id: "configuracion",
     number: "12",
     title: "Conexiones y Empresa (7 Pestañas de Configuración y Control SaaS)",

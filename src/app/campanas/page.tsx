@@ -1372,6 +1372,12 @@ export default function CampanasPage() {
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
               <a
+                href="/manual#guia-anuncios"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-[#22115d] text-xs font-bold rounded-xl"
+              >
+                📖 Guía Paso a Paso
+              </a>
+              <a
                 href="https://business.facebook.com/latest/composer"
                 target="_blank"
                 rel="noreferrer"
