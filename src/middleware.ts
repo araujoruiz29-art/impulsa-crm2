@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   "/api/auth/register",
   "/api/auth/logout",
   "/api/webhooks/meta",
+  "/api/cron/backup",
 ];
 
 function isPublicPath(pathname: string): boolean {

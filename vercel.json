@@ -1,6 +1,12 @@
 {
   "framework": "nextjs",
   "buildCommand": "pnpm run vercel-build",
+  "crons": [
+    {
+      "path": "/api/cron/backup",
+      "schedule": "0 8 * * 0"
+    }
+  ],
   "functions": {
     "src/app/api/ai/vision-stock/route.ts": {
       "maxDuration": 60
@@ -18,6 +24,9 @@
       "maxDuration": 60
     },
     "src/app/api/quotes/[id]/send/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/backup/route.ts": {
       "maxDuration": 60
     }
   }
