@@ -38,9 +38,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const workspaceId = await getActiveWorkspaceId();
   const body = await req.json();
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
+  const existing = await prisma.knowledgeDocument.findFirst({ where: { id, workspaceId } });
+  if (!existing) return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   const doc = await prisma.knowledgeDocument.update({
     where: { id },
     data: {
@@ -54,9 +57,10 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const workspaceId = await getActiveWorkspaceId();
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id") || "";
   if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
-  await prisma.knowledgeDocument.delete({ where: { id } });
+  await prisma.knowledgeDocument.deleteMany({ where: { id, workspaceId } });
   return NextResponse.json({ ok: true });
 }

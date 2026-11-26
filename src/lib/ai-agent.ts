@@ -55,7 +55,10 @@ async function buildDocumentsContext(workspaceId: string): Promise<string> {
   });
   if (docs.length === 0) return "";
   return docs
-    .map((d) => `### [${d.category}] ${d.title}\n${d.content.slice(0, 1500)}`)
+    .map((d) => {
+      const clean = (d.content || "").replace(/<!--IMPULSA_TRAINING_JSON:[\s\S]*?-->/g, "").trim();
+      return `### [${d.category}] ${d.title}\n${clean.slice(0, 6500)}`;
+    })
     .join("\n\n");
 }
 
