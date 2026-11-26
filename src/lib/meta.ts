@@ -229,3 +229,69 @@ export async function fetchMetaSocialProfile(
     return null;
   }
 }
+
+// Auto-reply publicly to a Facebook or Instagram comment + optionally send Private Reply DM (official Meta Graph API)
+export async function replyToMetaComment(opts: {
+  commentId: string;
+  channel: "FACEBOOK" | "INSTAGRAM";
+  publicReplyText: string;
+  privateDmText?: string;
+  workspaceId?: string;
+}) {
+  const cfg = await getIntegrationSettings(opts.workspaceId);
+  const token = (cfg.metaPageAccessToken || cfg.metaAccessToken || "").trim();
+  if (!token || !opts.commentId) {
+    return { ok: false, publicReplied: false, privateReplied: false };
+  }
+
+  let publicReplied = false;
+  let privateReplied = false;
+
+  // 1. Public comment reply
+  try {
+    const endpoint =
+      opts.channel === "INSTAGRAM"
+        ? `https://graph.facebook.com/v21.0/${encodeURIComponent(opts.commentId)}/replies`
+        : `https://graph.facebook.com/v21.0/${encodeURIComponent(opts.commentId)}/comments`;
+    const r = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: opts.publicReplyText.slice(0, 500) }),
+    });
+    publicReplied = r.ok;
+  } catch {
+    publicReplied = false;
+  }
+
+  // 2. Private DM reply directly to the commenter (official Meta Private Replies API)
+  if (opts.privateDmText) {
+    try {
+      const targetNode =
+        opts.channel === "INSTAGRAM"
+          ? (cfg.metaIgAccountId || cfg.metaPageId || "me").trim()
+          : (cfg.metaPageId || "me").trim();
+      const r2 = await fetch(
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(targetNode)}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            recipient: { comment_id: opts.commentId },
+            message: { text: opts.privateDmText.slice(0, 990) },
+          }),
+        }
+      );
+      privateReplied = r2.ok;
+    } catch {
+      privateReplied = false;
+    }
+  }
+
+  return { ok: publicReplied || privateReplied, publicReplied, privateReplied };
+}

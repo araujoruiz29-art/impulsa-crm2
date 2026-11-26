@@ -3,6 +3,7 @@ import { getIntegrationSettings, prisma } from "@/lib/prisma";
 import {
   fetchMetaLeadDetails,
   fetchMetaSocialProfile,
+  replyToMetaComment,
   sendMetaSocialMessage,
   sendWhatsAppCloudMessage,
   verifyMetaWebhookSignature,
@@ -372,6 +373,151 @@ export async function POST(req: NextRequest) {
             conversationId: conv.id,
             channel: "WHATSAPP",
           });
+        }
+
+        // C. Facebook Page Feed Comments & Instagram Comments Auto-Reply + Private DM + CRM Lead!
+        const isFbComment =
+          change.field === "feed" &&
+          value.item === "comment" &&
+          value.verb === "add" &&
+          value.comment_id &&
+          value.message;
+        const isIgComment = change.field === "comments" && value.id && value.text;
+
+        if (isFbComment || isIgComment) {
+          let commentWsId = wsId;
+          if (entry.id) {
+            const matchWs = await prisma.integrationSettings.findFirst({
+              where: {
+                OR: [{ metaPageId: String(entry.id) }, { metaIgAccountId: String(entry.id) }],
+              },
+              select: { id: true },
+            });
+            if (matchWs) commentWsId = matchWs.id;
+          }
+          const cCfg = commentWsId === wsId ? wsCfg : await getIntegrationSettings(commentWsId);
+
+          const commentId = String(isIgComment ? value.id : value.comment_id);
+          const commentText = String(isIgComment ? value.text : value.message).trim();
+          const commenterId = String(value.from?.id || commentId);
+          const commenterName = String(
+            value.from?.username
+              ? `@${value.from.username}`
+              : value.from?.name || (isIgComment ? "Usuario Instagram" : "Usuario Facebook")
+          );
+          const commentChannel: "INSTAGRAM" | "FACEBOOK" = isIgComment ? "INSTAGRAM" : "FACEBOOK";
+
+          // Skip our own page/account replies & duplicate retries
+          const isOwnReply =
+            commenterId === cCfg.metaPageId ||
+            commenterId === cCfg.metaIgAccountId ||
+            commenterId === String(entry.id || "");
+          if (!isOwnReply && commentText) {
+            const dupComment = await prisma.message.findFirst({
+              where: { externalMessageId: `comment:${commentId}` },
+              select: { id: true },
+            });
+            if (!dupComment) {
+              let cl = await prisma.client.findFirst({
+                where: { workspaceId: commentWsId, code: commenterId },
+              });
+              if (!cl) {
+                cl = await prisma.client.create({
+                  data: {
+                    workspaceId: commentWsId,
+                    code: commenterId,
+                    company: commenterName,
+                    contactName: commenterName,
+                    stage: "NUEVO",
+                    source: commentChannel,
+                    notes: `Comentario en ${commentChannel}: "${commentText}"`,
+                  },
+                });
+              }
+
+              let cConv = await prisma.conversation.findFirst({
+                where: { workspaceId: commentWsId, channel: commentChannel, externalId: commenterId },
+                orderBy: { createdAt: "asc" },
+              });
+              const previewText = `💬 [Comentario en publicación]: ${commentText}`;
+              if (!cConv) {
+                cConv = await prisma.conversation.create({
+                  data: {
+                    workspaceId: commentWsId,
+                    channel: commentChannel,
+                    externalId: commenterId,
+                    subject: cl.company,
+                    clientId: cl.id,
+                    unreadCount: 1,
+                    lastMessageAt: new Date(),
+                    lastMessagePreview: previewText.slice(0, 140),
+                  },
+                });
+              } else {
+                cConv = await prisma.conversation.update({
+                  where: { id: cConv.id },
+                  data: {
+                    unreadCount: { increment: 1 },
+                    lastMessageAt: new Date(),
+                    lastMessagePreview: previewText.slice(0, 140),
+                  },
+                });
+              }
+
+              await prisma.message.create({
+                data: {
+                  conversationId: cConv.id,
+                  direction: "INBOUND",
+                  senderName: commenterName,
+                  senderRole: "CLIENT",
+                  body: previewText,
+                  externalMessageId: `comment:${commentId}`,
+                  status: "DELIVERED",
+                },
+              });
+
+              if (cl.contactType === "CLIENTE") {
+                await qualifyLeadAndNotifySeller({
+                  clientId: cl.id,
+                  conversationId: cConv.id,
+                  messageBody: commentText,
+                  isAudio: false,
+                });
+
+                if (!cCfg.aiGlobalPaused && cConv.aiEnabled) {
+                  const ai = await generateAiReply({
+                    workspaceId: commentWsId,
+                    userMessage: `Un cliente comentó en una publicación de ${commentChannel}: "${commentText}". Redacta un mensaje privado amable y breve resolviendo su consulta (precio, ubicación, WhatsApp o producto) e invitándolo a continuar por aquí o por WhatsApp.`,
+                    channel: commentChannel,
+                    clientName: commenterName,
+                    clientCompany: cl.company,
+                  });
+
+                  const publicReplyText = `¡Hola ${commenterName}! 🙌 Te acabamos de enviar toda la información por mensaje privado 📩✅`;
+                  const rep = await replyToMetaComment({
+                    workspaceId: commentWsId,
+                    commentId,
+                    channel: commentChannel,
+                    publicReplyText,
+                    privateDmText: ai.reply,
+                  });
+
+                  await prisma.message.create({
+                    data: {
+                      conversationId: cConv.id,
+                      direction: "OUTBOUND",
+                      senderName: "Agente IA · Comentarios",
+                      senderRole: "AI",
+                      body: `📩 [Respuesta automática a comentario]:\n${ai.reply}`,
+                      status: rep.ok ? "SENT" : "SIMULATED",
+                    },
+                  });
+                }
+
+                await syncCrmFromConversation(cConv.id, commentWsId).catch(() => {});
+              }
+            }
+          }
         }
       }
 

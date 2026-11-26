@@ -37,6 +37,18 @@ interface MetaAdCampaignItem {
   clicks: number;
   ctr: number;
   leadsOrMessages: number;
+  costPerResult?: number;
+}
+
+interface VideoScriptResult {
+  title: string;
+  duration: string;
+  keyword: string;
+  hookTextOverlay: string;
+  scenes: Array<{ time: string; shot: string; spoken: string; onScreenText: string }>;
+  caption: string;
+  hashtags: string;
+  targetingTip: string;
 }
 
 interface CrmMetaAttribution {
@@ -171,6 +183,25 @@ export default function CampanasPage() {
   const [generatingCopy, setGeneratingCopy] = useState(false);
   const [adVariations, setAdVariations] = useState<AdCopyVariation[]>([]);
 
+  // In-Store Reel Script Studio + Direct Meta Campaign Launcher
+  const [scriptForm, setScriptForm] = useState({
+    product: "",
+    format: "PRESENTER",
+    storeLocation: "Ciudad Quesada y La Fortuna",
+    extraBenefit: "Coopelesca 10% dto · Tasa Cero · Envíos ₡3.000",
+  });
+  const [generatingScript, setGeneratingScript] = useState(false);
+  const [videoScript, setVideoScript] = useState<VideoScriptResult | null>(null);
+  const [newAdCamp, setNewAdCamp] = useState({
+    name: "",
+    objective: "OUTCOME_ENGAGEMENT",
+    dailyBudget: 3000,
+    zone: "SAN_CARLOS",
+    ageMin: 18,
+    ageMax: 55,
+  });
+  const [creatingAdCamp, setCreatingAdCamp] = useState(false);
+
   // Shared Meta approved templates
   const [templates, setTemplates] = useState<MetaTemplate[]>([]);
   const [tplLoading, setTplLoading] = useState(false);
@@ -278,7 +309,7 @@ export default function CampanasPage() {
       const res = await fetch("/api/meta/ads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(adCopyForm),
+        body: JSON.stringify({ action: "ad_copy", ...adCopyForm }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -288,6 +319,51 @@ export default function CampanasPage() {
       }
     } finally {
       setGeneratingCopy(false);
+    }
+  };
+
+  const generateInStoreScript = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeneratingScript(true);
+    setErrorBanner("");
+    try {
+      const res = await fetch("/api/meta/ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "video_script", ...scriptForm }),
+      });
+      const data = await res.json();
+      if (res.ok && data.script) {
+        setVideoScript(data.script);
+      } else {
+        setErrorBanner(data.error || "No se pudo generar el guion.");
+      }
+    } finally {
+      setGeneratingScript(false);
+    }
+  };
+
+  const launchDirectMetaCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingAdCamp(true);
+    setBanner("");
+    setErrorBanner("");
+    try {
+      const res = await fetch("/api/meta/ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create_campaign", ...newAdCamp }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBanner(data.message || "Campaña creada en Meta Ads.");
+        setNewAdCamp((prev) => ({ ...prev, name: "" }));
+        await loadMetaAds();
+      } else {
+        setErrorBanner(data.error || "No se pudo crear la campaña en Meta Ads.");
+      }
+    } finally {
+      setCreatingAdCamp(false);
     }
   };
 
@@ -1376,8 +1452,8 @@ export default function CampanasPage() {
                       <th className="py-2.5 px-3 text-right">Presupuesto/día</th>
                       <th className="py-2.5 px-3 text-right">Gasto 30d</th>
                       <th className="py-2.5 px-3 text-right">Alcance</th>
-                      <th className="py-2.5 px-3 text-right">Clics (CTR)</th>
                       <th className="py-2.5 px-3 text-right">Leads / Msgs</th>
+                      <th className="py-2.5 px-3 text-right">Costo / Result.</th>
                       <th className="py-2.5 px-3 text-right">Control</th>
                     </tr>
                   </thead>
@@ -1404,20 +1480,21 @@ export default function CampanasPage() {
                             </span>
                           </td>
                           <td className="py-3 px-3 text-right font-medium text-slate-700">
-                            {ad.dailyBudget > 0 ? ad.dailyBudget.toLocaleString("es-CR", { minimumFractionDigits: 2 }) : "—"}
+                            {ad.dailyBudget > 0 ? formatMoney(ad.dailyBudget, adsCurrency) : "—"}
                           </td>
                           <td className="py-3 px-3 text-right font-bold text-slate-900">
-                            {ad.spend.toLocaleString("es-CR", { minimumFractionDigits: 2 })}
+                            {formatMoney(ad.spend, adsCurrency)}
                           </td>
                           <td className="py-3 px-3 text-right text-slate-600">
                             {ad.reach.toLocaleString("es-CR")}
                           </td>
-                          <td className="py-3 px-3 text-right text-slate-600">
-                            {ad.clicks.toLocaleString("es-CR")}{" "}
-                            <span className="text-[10px] text-slate-400">({ad.ctr.toFixed(2)}%)</span>
-                          </td>
                           <td className="py-3 px-3 text-right font-extrabold text-[#0070C0]">
                             {ad.leadsOrMessages}
+                          </td>
+                          <td className="py-3 px-3 text-right font-semibold text-emerald-700">
+                            {ad.costPerResult && ad.costPerResult > 0
+                              ? formatMoney(ad.costPerResult, adsCurrency)
+                              : "—"}
                           </td>
                           <td className="py-3 px-3 text-right">
                             <button
@@ -1452,6 +1529,229 @@ export default function CampanasPage() {
                 No se encontraron campañas publicitarias en esta cuenta todavía. Conecta tu <strong>Meta Ad Account ID</strong> en <em>Conexiones y empresa → Meta Cloud API</em> o crea tu primer anuncio con el botón superior.
               </div>
             )}
+          </div>
+
+          {/* In-Store Video Script Studio + Direct Meta Ads Campaign Launcher */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* 1. In-Store Reel Script Studio */}
+            <form
+              onSubmit={generateInStoreScript}
+              className="lg:col-span-7 bg-white rounded-2xl border border-indigo-200 p-5 shadow-xs space-y-4 text-xs"
+            >
+              <div>
+                <h3 className="text-sm font-bold text-[#22115d] flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-[#0070C0]" />
+                  🎬 Estudio IA de Guiones para Grabar Reels en Tienda (sin terceros)
+                </h3>
+                <p className="text-slate-500 mt-0.5">
+                  Elige el formato y producto: Gemini crea el guion escena por escena (0–25 seg), qué tomas grabar con el celular, textos sin errores ortográficos, descripción local y palabra clave para tu bot.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-semibold text-slate-700">¿Qué producto o promo van a grabar en tienda? *</label>
+                  <input
+                    required
+                    value={scriptForm.product}
+                    onChange={(e) => setScriptForm({ ...scriptForm, product: e.target.value })}
+                    placeholder="Ej. Relojes Garmin Forerunner 55 / 165 / 265 con 1 año de garantía"
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Formato del Reel</label>
+                  <select
+                    value={scriptForm.format}
+                    onChange={(e) => setScriptForm({ ...scriptForm, format: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="PRESENTER">Formato A · Asesor(a) en tienda + acercamientos (25 seg)</option>
+                    <option value="HANDS_ONLY">Formato B · Solo manos y producto sin rostro (15 seg)</option>
+                    <option value="PROMO">Formato C · Promo / Pares únicos / Temporada (20 seg)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Sucursales / Zona</label>
+                  <input
+                    value={scriptForm.storeLocation}
+                    onChange={(e) => setScriptForm({ ...scriptForm, storeLocation: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="font-semibold text-slate-700">Beneficio extra a destacar</label>
+                  <input
+                    value={scriptForm.extraBenefit}
+                    onChange={(e) => setScriptForm({ ...scriptForm, extraBenefit: e.target.value })}
+                    placeholder="Ej. 10% descuento Coopelesca · Tasa Cero · Envíos ₡3.000 a todo CR"
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={generatingScript}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#22115d] hover:bg-indigo-900 disabled:opacity-50 text-white font-bold rounded-xl"
+              >
+                <Sparkles className="w-4 h-4" />
+                {generatingScript ? "Creando guion para grabar..." : "Crear Guion + Tomas + Caption con IA"}
+              </button>
+
+              {videoScript && (
+                <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-200 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-extrabold text-[#22115d] text-sm">{videoScript.title}</div>
+                      <div className="text-[11px] text-slate-600">
+                        Duración: <strong>{videoScript.duration}</strong> · Texto gancho arriba:{" "}
+                        <strong className="text-rose-700">{videoScript.hookTextOverlay}</strong> · Palabra clave DM:{" "}
+                        <code className="bg-white px-1.5 py-0.5 rounded border border-indigo-200 font-bold text-[#22115d]">
+                          {videoScript.keyword}
+                        </code>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(`${videoScript.caption}\n\n${videoScript.hashtags}`);
+                        setBanner("📋 Descripción (Caption) y hashtags copiados para pegar en Facebook e Instagram.");
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-indigo-200 text-[#22115d] rounded-lg font-bold text-[11px] hover:bg-indigo-100"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Copiar Caption
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {videoScript.scenes.map((sc, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-white border border-indigo-100 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-extrabold text-[#0070C0]">{sc.time}</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900">
+                            Texto pantalla: {sc.onScreenText}
+                          </span>
+                        </div>
+                        <div className="text-slate-600">
+                          <strong>🎥 Toma celular:</strong> {sc.shot}
+                        </div>
+                        {sc.spoken && (
+                          <div className="text-slate-900">
+                            <strong>🎙️ Qué decir:</strong> &ldquo;{sc.spoken}&rdquo;
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white border border-indigo-100 space-y-1">
+                    <div className="font-bold text-slate-800">📝 Descripción (Caption) lista para FB e IG:</div>
+                    <p className="text-slate-700 whitespace-pre-wrap">{videoScript.caption}</p>
+                    <div className="text-[#0070C0] font-semibold">{videoScript.hashtags}</div>
+                  </div>
+                  <div className="text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5">
+                    <strong>🎯 Recomendación Meta Ads:</strong> {videoScript.targetingTip}
+                  </div>
+                </div>
+              )}
+            </form>
+
+            {/* 2. Direct Campaign + AdSet Launcher into Meta Ads */}
+            <form
+              onSubmit={launchDirectMetaCampaign}
+              className="lg:col-span-5 bg-white rounded-2xl border border-emerald-200 p-5 shadow-xs space-y-3.5 text-xs h-fit"
+            >
+              <div>
+                <h3 className="text-sm font-bold text-emerald-950 flex items-center gap-1.5">
+                  <Megaphone className="w-4 h-4 text-emerald-600" />
+                  🚀 Crear Campaña Directo en Meta Ads (Sin Terceros)
+                </h3>
+                <p className="text-slate-500 mt-0.5">
+                  Crea la Campaña y el Conjunto de Anuncios segmentado directo en tu cuenta publicitaria (en estado <strong>Pausado</strong>) para que solo subas tu Reel y la enciendas aquí.
+                </p>
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700">Nombre de la campaña *</label>
+                <input
+                  required
+                  value={newAdCamp.name}
+                  onChange={(e) => setNewAdCamp({ ...newAdCamp, name: e.target.value })}
+                  placeholder="Ej. Garmin Mensajes San Carlos Nov"
+                  className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700">Objetivo</label>
+                <select
+                  value={newAdCamp.objective}
+                  onChange={(e) => setNewAdCamp({ ...newAdCamp, objective: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="OUTCOME_ENGAGEMENT">💬 Conversaciones / Mensajes (WhatsApp · IG · FB)</option>
+                  <option value="OUTCOME_TRAFFIC">🌐 Tráfico a perfil / Tienda web</option>
+                  <option value="OUTCOME_LEADS">📋 Formulario de Leads (Meta Lead Ads)</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700">Presupuesto diario ({adsCurrency})</label>
+                  <input
+                    type="number"
+                    min={500}
+                    step={500}
+                    value={newAdCamp.dailyBudget}
+                    onChange={(e) => setNewAdCamp({ ...newAdCamp, dailyBudget: Number(e.target.value) })}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Zona geográfica</label>
+                  <select
+                    value={newAdCamp.zone}
+                    onChange={(e) => setNewAdCamp({ ...newAdCamp, zone: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="SAN_CARLOS">Ciudad Quesada + La Fortuna</option>
+                    <option value="LA_FORTUNA">Solo La Fortuna (25 km)</option>
+                    <option value="GAM">GAM (San José / Alajuela / Heredia)</option>
+                    <option value="COSTA_RICA">Todo Costa Rica</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700">Edad mínima</label>
+                  <input
+                    type="number"
+                    min={18}
+                    max={60}
+                    value={newAdCamp.ageMin}
+                    onChange={(e) => setNewAdCamp({ ...newAdCamp, ageMin: Number(e.target.value) })}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Edad máxima</label>
+                  <input
+                    type="number"
+                    min={18}
+                    max={65}
+                    value={newAdCamp.ageMax}
+                    onChange={(e) => setNewAdCamp({ ...newAdCamp, ageMax: Number(e.target.value) })}
+                    className="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={creatingAdCamp}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-xs"
+              >
+                {creatingAdCamp ? "Creando en Meta Ads..." : "🚀 Crear Campaña (Pausada) en Meta Ads"}
+              </button>
+              <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-[11px] text-sky-950">
+                <strong>💬 Extra activado:</strong> Si suscribes los campos <code>feed</code> (Page) y <code>comments</code> (Instagram) en tu Webhook, la IA también responde automáticamente los comentarios de <em>&ldquo;Precio&rdquo;</em> y <em>&ldquo;Ubicación&rdquo;</em> enviando DM privado al instante.
+              </div>
+            </form>
           </div>
 
           {/* AI Ad Copy Generator + Recent Meta Leads */}

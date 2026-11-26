@@ -18,6 +18,7 @@ interface MetaAdCampaign {
   clicks: number;
   ctr: number;
   leadsOrMessages: number;
+  costPerResult: number;
 }
 
 function normalizeAdAccountId(raw: string): string {
@@ -85,7 +86,7 @@ export async function GET() {
         adAccountId: adAccountId || "",
         currency: company.defaultCurrency || "CRC",
         warning:
-          "Agrega tu Meta Ad Account ID (ej. act_123456789) y un Token con permisos ads_read / ads_management en Conexiones y empresa → Meta Cloud API para ver y pausar/activar tus anuncios de Facebook e Instagram aquí.",
+          "Agrega tu Meta Ad Account ID (ej. act_808438614331546) y un Token con permisos ads_read y ads_management en Conexiones y empresa → Meta Cloud API para ver, crear y pausar/activar tus campañas de Facebook e Instagram aquí.",
         adCampaigns: [] as MetaAdCampaign[],
         crmAttribution,
       });
@@ -93,7 +94,7 @@ export async function GET() {
 
     const url = `https://graph.facebook.com/v21.0/${encodeURIComponent(
       adAccountId
-    )}/campaigns?fields=id,name,status,effective_status,objective,daily_budget,lifetime_budget,created_time,insights.date_preset(last_30d){spend,impressions,reach,clicks,ctr,actions}&limit=30`;
+    )}/campaigns?fields=id,name,status,effective_status,objective,daily_budget,lifetime_budget,created_time,insights.date_preset(last_30d){spend,impressions,reach,clicks,ctr,actions}&limit=40`;
 
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -108,7 +109,7 @@ export async function GET() {
         currency: company.defaultCurrency || "CRC",
         warning:
           data?.error?.message ||
-          `Meta Ads API respondió HTTP ${res.status}. Verifica que el token tenga permisos ads_read y ads_management.`,
+          `Meta Ads API respondió HTTP ${res.status}. Verifica en Meta Business → Usuarios del sistema que el token tenga asignada tu cuenta publicitaria (${adAccountId}) con permisos ads_read y ads_management.`,
         adCampaigns: [] as MetaAdCampaign[],
         crmAttribution,
       });
@@ -121,12 +122,15 @@ export async function GET() {
       const leadAction = actions
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .filter((a: any) =>
-          /lead|messaging_conversation_started|onsite_conversion\.messaging_first_reply/i.test(
+          /lead|messaging_conversation_started|onsite_conversion\.messaging_first_reply|landing_page_view|link_click/i.test(
             String(a.action_type || "")
           )
         )
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .reduce((acc: number, a: any) => acc + Number(a.value || 0), 0);
+
+      const spend = Number(ins.spend || 0);
+      const costPerResult = leadAction > 0 ? spend / leadAction : 0;
 
       return {
         id: String(row.id || ""),
@@ -134,16 +138,16 @@ export async function GET() {
         status: String(row.status || "PAUSED"),
         effectiveStatus: String(row.effective_status || row.status || "PAUSED"),
         objective: String(row.objective || ""),
-        // Meta returns budgets in minor currency units (cents)
         dailyBudget: row.daily_budget ? Number(row.daily_budget) / 100 : 0,
         lifetimeBudget: row.lifetime_budget ? Number(row.lifetime_budget) / 100 : 0,
         createdTime: String(row.created_time || ""),
-        spend: Number(ins.spend || 0),
+        spend,
         impressions: Number(ins.impressions || 0),
         reach: Number(ins.reach || 0),
         clicks: Number(ins.clicks || 0),
         ctr: Number(ins.ctr || 0),
         leadsOrMessages: leadAction,
+        costPerResult,
       };
     });
 
@@ -216,16 +220,278 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// POST: AI Ad Copy Generator for Facebook & Instagram Ads (Click-to-WhatsApp / IG / Messenger)
+// POST:
+//   action === "create_campaign" -> Creates a real Campaign + AdSet directly in Meta Ads (PAUSED for safe review)
+//   action === "video_script"    -> Generates complete In-Store Reel Script (shots, voice, overlays, caption, keyword)
+//   default                      -> Generates 3 Ad Copy variations
 export async function POST(req: NextRequest) {
   try {
     const workspaceId = await getActiveWorkspaceId();
-    const [cfg, company] = await Promise.all([
+    const [cfg, company, docs] = await Promise.all([
       getIntegrationSettings(workspaceId),
       getCompanySettings(workspaceId),
+      prisma.knowledgeDocument.findMany({
+        where: { workspaceId, active: true },
+        orderBy: { updatedAt: "desc" },
+        take: 4,
+      }),
     ]);
 
     const body = await req.json();
+    const action = String(body.action || "ad_copy");
+
+    // 1. DIRECT CAMPAIGN + ADSET LAUNCHER IN META ADS
+    if (action === "create_campaign") {
+      const adAccountId = normalizeAdAccountId(cfg.metaAdAccountId);
+      const token = (cfg.metaAccessToken || cfg.metaPageAccessToken || "").trim();
+      if (!adAccountId || !token) {
+        return NextResponse.json(
+          {
+            error:
+              "Primero guarda tu Meta Ad Account ID (ej. act_808438614331546) y tu Token con permiso ads_management en Conexiones y empresa → Meta Cloud API.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const name = String(body.name || "").trim();
+      const objective = ["OUTCOME_ENGAGEMENT", "OUTCOME_TRAFFIC", "OUTCOME_LEADS"].includes(
+        String(body.objective)
+      )
+        ? String(body.objective)
+        : "OUTCOME_ENGAGEMENT";
+      const dailyBudget = Math.max(500, Number(body.dailyBudget) || 3000);
+      const zone = String(body.zone || "SAN_CARLOS");
+      const ageMin = Math.max(18, Math.min(60, Number(body.ageMin) || 18));
+      const ageMax = Math.max(ageMin, Math.min(65, Number(body.ageMax) || 55));
+
+      if (!name) {
+        return NextResponse.json({ error: "Escribe un nombre para la campaña." }, { status: 400 });
+      }
+
+      // Step A: Create Campaign (PAUSED for safe review)
+      const campRes = await fetch(
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(adAccountId)}/campaigns`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name,
+            objective,
+            status: "PAUSED",
+            special_ad_categories: [],
+          }),
+        }
+      );
+      const campData = await campRes.json().catch(() => ({}));
+      if (!campRes.ok || !campData.id) {
+        return NextResponse.json(
+          {
+            error:
+              campData?.error?.message ||
+              `No se pudo crear la campaña en Meta Ads (HTTP ${campRes.status}). Verifica el permiso ads_management.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      // Step B: Create targeted Ad Set (San Carlos / La Fortuna / GAM / Costa Rica)
+      let geoLocations: Record<string, unknown> = { countries: ["CR"] };
+      if (zone === "SAN_CARLOS") {
+        geoLocations = {
+          custom_locations: [
+            { latitude: 10.3238, longitude: -84.4271, radius: 28, distance_unit: "kilometer" }, // Ciudad Quesada
+            { latitude: 10.4678, longitude: -84.6427, radius: 22, distance_unit: "kilometer" }, // La Fortuna
+          ],
+        };
+      } else if (zone === "LA_FORTUNA") {
+        geoLocations = {
+          custom_locations: [
+            { latitude: 10.4678, longitude: -84.6427, radius: 25, distance_unit: "kilometer" },
+          ],
+        };
+      } else if (zone === "GAM") {
+        geoLocations = {
+          custom_locations: [
+            { latitude: 9.9281, longitude: -84.0907, radius: 30, distance_unit: "kilometer" },
+          ],
+        };
+      }
+
+      const optimizationGoal =
+        objective === "OUTCOME_TRAFFIC"
+          ? "LINK_CLICKS"
+          : objective === "OUTCOME_LEADS"
+          ? "LEAD_GENERATION"
+          : "CONVERSATIONS";
+
+      const adSetPayload: Record<string, unknown> = {
+        name: `${name} · Conjunto (${zone})`,
+        campaign_id: campData.id,
+        daily_budget: Math.round(dailyBudget * 100), // Meta minor units
+        billing_event: "IMPRESSIONS",
+        optimization_goal: optimizationGoal,
+        bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+        targeting: {
+          geo_locations: geoLocations,
+          age_min: ageMin,
+          age_max: ageMax,
+        },
+        status: "PAUSED",
+      };
+      if (objective === "OUTCOME_ENGAGEMENT") {
+        adSetPayload.destination_type = "WHATSAPP";
+        if (cfg.metaPageId) {
+          adSetPayload.promoted_object = { page_id: cfg.metaPageId };
+        }
+      }
+
+      const adSetRes = await fetch(
+        `https://graph.facebook.com/v21.0/${encodeURIComponent(adAccountId)}/adsets`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(adSetPayload),
+        }
+      );
+      const adSetData = await adSetRes.json().catch(() => ({}));
+
+      return NextResponse.json({
+        ok: true,
+        campaignId: campData.id,
+        adSetId: adSetData.id || null,
+        adSetWarning: !adSetRes.ok ? adSetData?.error?.message || "" : "",
+        message: adSetData.id
+          ? `✅ Campaña "${name}" + Conjunto de Anuncios creados en Meta Ads (estado PAUSADA). Sube tu video/Reel en Meta Ads Manager y enciéndela en 1 clic desde aquí.`
+          : `✅ Campaña "${name}" creada en Meta Ads (ID ${campData.id}, PAUSADA). Completa el video en Meta Ads Manager.${
+              adSetData?.error?.message ? ` (Nota AdSet: ${adSetData.error.message})` : ""
+            }`,
+      });
+    }
+
+    // 2. IN-STORE REEL VIDEO SCRIPT STUDIO (Formats A & B based on El Caminante's real Reels!)
+    if (action === "video_script") {
+      const product = String(body.product || "").trim();
+      const format = String(body.format || "PRESENTER"); // PRESENTER | HANDS_ONLY | PROMO
+      const storeLocation = String(body.storeLocation || "Ciudad Quesada y La Fortuna").trim();
+      const extraBenefit = String(body.extraBenefit || "").trim();
+
+      if (!product) {
+        return NextResponse.json(
+          { error: "Escribe qué producto o promoción quieres grabar en el video." },
+          { status: 400 }
+        );
+      }
+
+      const docsSummary = docs
+        .map((d) => d.content.replace(/<!--IMPULSA_TRAINING_JSON:[\s\S]*?-->/g, "").slice(0, 900))
+        .join("\n")
+        .slice(0, 2200);
+
+      const fallbackScript = {
+        title: `Reel en tienda: ${product}`,
+        duration: format === "HANDS_ONLY" ? "15 segundos" : "25 segundos",
+        keyword: product.split(/\s+/)[0]?.toUpperCase().replace(/[^A-Z0-9]/g, "") || "INFO",
+        hookTextOverlay: `🔥 ${product.slice(0, 32).toUpperCase()}`,
+        scenes: [
+          {
+            time: "0:00 - 0:04",
+            shot:
+              format === "HANDS_ONLY"
+                ? `Acercamiento vertical con el celular sosteniendo ${product} y girándolo bajo la luz de la tienda.`
+                : `Asesor(a) con polo de ${company.brandName} sosteniendo ${product} frente a cámara en la tienda.`,
+            spoken: `¿Buscas ${product}? Mira lo que acaba de llegar a ${company.brandName}.`,
+            onScreenText: `LO NUEVO EN ${company.brandName.toUpperCase()}`,
+          },
+          {
+            time: "0:04 - 0:15",
+            shot: `3 tomas rápidas de 3 segundos mostrando detalles, calidad, colores o tallas disponibles en estante.`,
+            spoken: `Calidad garantizada, atención en ${storeLocation} y envíos a todo Costa Rica.${
+              extraBenefit ? ` Además: ${extraBenefit}.` : ""
+            }`,
+            onScreenText: `CALIDAD + ENVÍOS A TODO CR`,
+          },
+          {
+            time: "0:15 - 0:23",
+            shot: `Toma final mostrando el producto de frente + gesto señalando el botón de mensaje.`,
+            spoken: `Escríbenos la palabra ${
+              product.split(/\s+/)[0]?.toUpperCase() || "INFO"
+            } por mensaje y te enviamos precio y disponibilidad ahora mismo.`,
+            onScreenText: `ESCRIBE «${product.split(/\s+/)[0]?.toUpperCase() || "INFO"}» POR MENSAJE`,
+          },
+        ],
+        caption: `🔥 ${product} disponible en ${company.brandName} (${storeLocation}).\n${
+          extraBenefit ? `✅ ${extraBenefit}\n` : ""
+        }📦 Envíos a todo Costa Rica.\n👇 Toca «Enviar mensaje» y escríbenos para cotizar hoy mismo.`,
+        hashtags: "#CostaRica #SanCarlos #CiudadQuesada #LaFortuna #ComprasCR",
+        targetingTip: `Objetivo: Interacción → Mensajes a WhatsApp. Presupuesto inicial recomendado: ₡3.000/día en ${storeLocation} (18–55 años).`,
+      };
+
+      if (!cfg.aiApiKey) {
+        return NextResponse.json({ ok: true, mode: "template", script: fallbackScript });
+      }
+
+      try {
+        const formatDesc =
+          format === "HANDS_ONLY"
+            ? "FORMATO SIN ROSTRO (15 seg): solo manos girando el producto en la tienda mostrando perfil, detalles y empaque con cortes rápidos y textos grandes en pantalla."
+            : format === "PROMO"
+            ? "FORMATO PROMO / TEMPORADA (20-25 seg): ritmo enérgico destacando oferta limitada, pares únicos o facilidades de pago."
+            : "FORMATO ASESOR(A) EN TIENDA + B-ROLL (25 seg): asesor con camiseta de la empresa y micrófono de solapa hablando a cámara, intercalado con acercamientos del producto y cierre con palabra clave para escribir por mensaje.";
+
+        const prompt = `Eres director creativo de anuncios Reels para Facebook e Instagram en Costa Rica (estilo cercano, claro y 100% SIN faltas de ortografía).
+EMPRESA: ${company.brandName}
+PRODUCTO / PROMO: ${product}
+SUCURSALES / ZONA: ${storeLocation}
+BENEFICIO EXTRA: ${extraBenefit || "Usar beneficios reales del negocio si están en la base de conocimiento"}
+${formatDesc}
+
+CONOCIMIENTO REAL DEL NEGOCIO (usa estos datos reales: garantías, Coopelesca, Tasa Cero, envíos, etc. si aplican):
+${docsSummary || "(Sin documentos adicionales)"}
+
+Devuelve ÚNICAMENTE un JSON válido (sin markdown ni texto extra):
+{
+  "title": "Nombre del Reel",
+  "duration": "15-25 segundos",
+  "keyword": "PALABRA_CLAVE_EN_MAYUSCULAS (1 sola palabra bien escrita, ej. GARMIN o TRAIL)",
+  "hookTextOverlay": "Texto corto de gancho para poner arriba en el video (máx 35 chars, ortografía impecable)",
+  "scenes": [
+    {"time": "0:00 - 0:04", "shot": "Instrucción exacta de qué grabar con el celular", "spoken": "Lo que dice la persona (o vacío si es sin rostro)", "onScreenText": "Texto breve en pantalla"},
+    {"time": "0:04 - 0:14", "shot": "...", "spoken": "...", "onScreenText": "..."},
+    {"time": "0:14 - 0:22", "shot": "...", "spoken": "...", "onScreenText": "..."}
+  ],
+  "caption": "Descripción completa para Facebook e Instagram con emojis moderados, ubicación, facilidades de pago/garantía y llamado a enviar mensaje",
+  "hashtags": "#Hasta6HashtagsLocales",
+  "targetingTip": "Recomendación concreta de presupuesto en colones (ej. ₡3.000/día), zona y público para Meta Ads"
+}`;
+        const { text } = await callGeminiResilient({
+          apiKey: cfg.aiApiKey,
+          preferredModel: cfg.aiModel,
+          temperature: 0.6,
+          maxOutputTokens: 1100,
+          parts: [{ text: prompt }],
+        });
+        const m = text.match(/\{[\s\S]*\}/);
+        if (m) {
+          const parsed = JSON.parse(m[0]);
+          if (Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
+            return NextResponse.json({ ok: true, mode: "gemini", script: parsed });
+          }
+        }
+      } catch (e) {
+        console.error("Video script Gemini error:", e);
+      }
+
+      return NextResponse.json({ ok: true, mode: "template", script: fallbackScript });
+    }
+
+    // 3. AD COPY VARIATIONS GENERATOR (existing)
     const productOrPromo = String(body.productOrPromo || "").trim();
     const objective = String(body.objective || "Mensajes a WhatsApp / Instagram").trim();
     const audience = String(body.audience || "Público general / empresas en Costa Rica").trim();
@@ -243,14 +509,14 @@ export async function POST(req: NextRequest) {
         headline: `${productOrPromo.slice(0, 42)} · Cotiza hoy`,
         primaryText: `¿Buscas ${productOrPromo}? En ${company.brandName} te atendemos de inmediato por WhatsApp o Instagram con respuesta rápida y cotización sin compromiso. 👇 Toca «Enviar mensaje» y te ayudamos ahora mismo.`,
         cta: "Enviar mensaje",
-        targetingTip: `Intereses relacionados a ${audience}, radio local o país completo, ubicación automática en Reels + Feed de Facebook e Instagram.`,
+        targetingTip: `Intereses relacionados a ${audience}, ubicación automática en Reels + Feed de Facebook e Instagram.`,
       },
       {
         angle: "Urgencia y confianza",
         headline: `Atención rápida en ${company.brandName}`,
-        primaryText: `Deja de perder tiempo esperando respuestas. Con ${company.brandName} cotizas ${productOrPromo} en minutos y con respaldo real. 📲 Escríbenos hoy mismo haciendo clic en el botón.`,
+        primaryText: `Con ${company.brandName} cotizas ${productOrPromo} en minutos y con respaldo real. 📲 Escríbenos hoy mismo haciendo clic en el botón.`,
         cta: "Enviar mensaje por WhatsApp",
-        targetingTip: `Crea un anuncio de objetivo «Interacción → Mensajes» hacia WhatsApp o Instagram Direct.`,
+        targetingTip: `Objetivo «Interacción → Mensajes» hacia WhatsApp o Instagram Direct.`,
       },
       {
         angle: "Prueba social / Reels",
@@ -266,7 +532,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const prompt = `Eres un experto en pauta publicitaria de Meta Ads (Facebook e Instagram) en Costa Rica y Latinoamérica.
+      const prompt = `Eres un experto en pauta publicitaria de Meta Ads (Facebook e Instagram) en Costa Rica.
 Empresa: ${company.brandName} (${company.companyName})
 Producto / Oferta a anunciar: ${productOrPromo}
 Objetivo del anuncio: ${objective}
@@ -276,11 +542,11 @@ Devuelve ÚNICAMENTE un JSON válido (sin markdown ni texto extra) con 3 variaci
 {
   "variations": [
     {
-      "angle": "Nombre corto del enfoque (ej. Dolor y solución / Oferta directa / Video Reel)",
+      "angle": "Nombre corto del enfoque",
       "headline": "Título llamativo de máximo 45 caracteres",
       "primaryText": "Texto principal persuasivo con emojis moderados y llamado a escribir por WhatsApp/IG/Messenger",
-      "cta": "Botón recomendado (ej. Enviar mensaje por WhatsApp / Enviar mensaje / Más información)",
-      "targetingTip": "Sugerencia concreta de segmentación y formato (Feed/Reels/Historias) en Meta Ads"
+      "cta": "Botón recomendado",
+      "targetingTip": "Sugerencia concreta de segmentación y formato en Meta Ads"
     }
   ]
 }`;
@@ -305,7 +571,7 @@ Devuelve ÚNICAMENTE un JSON válido (sin markdown ni texto extra) con 3 variaci
     return NextResponse.json({ ok: true, mode: "template", variations: fallbackIdeas });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Error generando textos de anuncio." },
+      { error: err instanceof Error ? err.message : "Error procesando solicitud de Meta Ads." },
       { status: 500 }
     );
   }
