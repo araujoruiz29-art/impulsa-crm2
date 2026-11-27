@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^6.6.0",
+    "@prisma/client": "^7.10.1",
     "imapflow": "^1.0.180",
     "lucide-react": "^0.511.0",
     "mailparser": "^3.7.2",
