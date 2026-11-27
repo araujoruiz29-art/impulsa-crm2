@@ -692,7 +692,61 @@ export const MANUAL_SECTIONS: ManualSection[] = [
       {
         control: "Guardar Configuración",
         location: "Botón azul inferior derecho",
-        purpose: "Guarda todos los cambios realizados en las pestañas Empresa, Meta o Agente de IA.",
+        purpose: "Guarda todos los cambios realizados en las pestañas Empresa, Meta, Agente de IA o Vanguardia.",
+      },
+    ],
+  },
+  {
+    id: "vanguardia",
+    number: "14",
+    title: "Centro de Vanguardia 2026 (Tienda Web, Agenda, Round-Robin, Abonos, API/Odoo, FE CR 4.4 y Auditoría)",
+    route: "/configuracion (Pestaña Vanguardia)",
+    group: "IA Y SISTEMA",
+    summary:
+      "Reúne las capacidades avanzadas de impulsa CRM: Mini-Catálogo Web Público (/tienda/[empresa]), Agenda Pública de Citas estilo Calendly (/agendar/[empresa]) con recordatorios automáticos 24h/2h, Reparto Round-Robin y SLA por vendedor, Botones Interactivos y Notas de Voz IA en WhatsApp, soporte Meta 2026 BSUIDs, Control de Abonos y Saldo Pendiente, Conector Universal (Webhooks + API Pública para Odoo/n8n/Zapier/Shopify), Links de Pago con Tarjeta, Facturación Electrónica CR 4.4, Bitácora de Auditoría y Reporte Ejecutivo Semanal.",
+    tip: "Comparte tus enlaces públicos /tienda/[empresa] y /agendar/[empresa] en tu biografía de Instagram, Facebook y WhatsApp para capturar pedidos y citas 24/7 directo a tu Kanban.",
+    buttons: [
+      {
+        control: "🛍️ Mini-Catálogo Web Público (/tienda/[empresa])",
+        location: "Conexiones y empresa → Pestaña Vanguardia",
+        purpose:
+          "Genera automáticamente un catálogo web con tus productos activos, precios de mayoreo, carrito y botones «Pedir por WhatsApp» y «Solicitar Proforma PDF» conectados directo a tu CRM.",
+      },
+      {
+        control: "📅 Agenda Pública de Citas (/agendar/[empresa]) + Recordatorios 24h/2h",
+        location: "Conexiones y empresa → Pestaña Vanguardia",
+        purpose:
+          "Permite que tus clientes reserven fecha y hora solos según tu horario; crea el lead + cita en Agenda + aviso y dispara recordatorios automáticos por WhatsApp 24 horas y 2 horas antes.",
+      },
+      {
+        control: "🔄 Reparto Automático (Round-Robin) + SLA de Respuesta + Meta BSUIDs",
+        location: "Conexiones y empresa → Pestaña Vanguardia",
+        purpose:
+          "Asigna nuevos chats y leads por turno entre tus vendedores activos, mide el tiempo promedio de primera respuesta (SLA en minutos) y guarda BSUID/username para la actualización 2026 de WhatsApp.",
+      },
+      {
+        control: "🎛️ Botones Interactivos WA y 🎙️ Notas de Voz IA",
+        location: "Bandeja de Conversaciones (chats de WhatsApp)",
+        purpose:
+          "«🎛️ Botones WA» envía menús con hasta 3 botones tocables oficiales en WhatsApp. «🎙️ Audio IA» convierte tu respuesta en una nota de voz natural (Gemini TTS) y la envía por WhatsApp Cloud API.",
+      },
+      {
+        control: "💰 Abonos / Saldo Pendiente · 💳 Link Tarjeta · 🧾 Factura Electrónica CR 4.4",
+        location: "Cotizaciones PDF (fila de cada proforma) + Portal Cliente",
+        purpose:
+          "Registra abonos parciales SINPE/transferencia calculando saldo pendiente en vivo, agrega enlaces de pago con tarjeta (Tilopay / Onvo / Compra-Click / Stripe) visibles en el Portal Cliente y genera/envía la Factura Electrónica CR versión 4.4.",
+      },
+      {
+        control: "🔌 Webhooks de Salida (Odoo / n8n / Zapier / Make) + API Pública (/api/v1/leads)",
+        location: "Conexiones y empresa → Pestaña Vanguardia",
+        purpose:
+          "Envía eventos firmados con HMAC (CLIENT_CREATED, STAGE_CHANGED, QUOTE_APPROVED, PAYMENT_RECEIVED, BOOKING_CREATED, INVOICE_EMITTED) hacia Odoo o automatizadores, y genera una API Key privada para recibir leads externos.",
+      },
+      {
+        control: "📊 Reporte Ejecutivo Semanal (Lunes 7 a.m.) + 🛡️ Bitácora de Auditoría",
+        location: "Conexiones y empresa → Pestaña Vanguardia",
+        purpose:
+          "Envía cada lunes un resumen gerencial al dueño (ventas ganadas, abonos, saldo pendiente, citas y SLA) y registra una bitácora inmutable de cambios clave realizados por usuarios.",
       },
     ],
   },

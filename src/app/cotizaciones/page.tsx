@@ -507,10 +507,88 @@ function CotizacionesInner() {
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-right font-bold text-slate-900">
-                      {formatMoney(qt.total, qt.currency)}
+                      <div>{formatMoney(qt.total, qt.currency)}</div>
+                      {Number((qt as QuoteRecord & { paidAmount?: number }).paidAmount || 0) > 0 && (
+                        <div className="text-[10px] font-bold text-emerald-700">
+                          Abonado: {formatMoney(Number((qt as QuoteRecord & { paidAmount?: number }).paidAmount || 0), qt.currency)} · Saldo:{" "}
+                          {formatMoney(
+                            Math.max(0, qt.total - Number((qt as QuoteRecord & { paidAmount?: number }).paidAmount || 0)),
+                            qt.currency
+                          )}
+                        </div>
+                      )}
+                      {(qt as QuoteRecord & { feNumber?: string }).feNumber && (
+                        <div className="text-[10px] font-mono text-indigo-700">
+                          FE 4.4: {(qt as QuoteRecord & { feStatus?: string }).feStatus}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <div className="inline-flex items-center gap-1">
+                      <div className="inline-flex items-center gap-1 flex-wrap justify-end">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const rawAmt = prompt(`Registrar abono para Proforma #${qt.number} (Total ${formatMoney(qt.total, qt.currency)}). Monto recibido:`);
+                            if (!rawAmt) return;
+                            const amount = Number(rawAmt.replace(/[^0-9.]/g, ""));
+                            if (!amount || amount <= 0) return alert("Monto inválido.");
+                            const ref = prompt("Número de comprobante / referencia (SINPE / Transferencia):", "") || "";
+                            const res = await fetch(`/api/quotes/${qt.id}/payments`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ amount, method: "SINPE", reference: ref }),
+                            });
+                            const d = await res.json();
+                            if (res.ok) {
+                              alert(`✅ Abono registrado. Saldo pendiente: ${formatMoney(d.balance || 0, qt.currency)}`);
+                              loadAll();
+                            } else {
+                              alert(d.error || "Error registrando abono.");
+                            }
+                          }}
+                          className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px]"
+                          title="Registrar abono parcial o pago SINPE y calcular saldo pendiente"
+                        >
+                          💰 Abono
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await fetch(`/api/quotes/${qt.id}/invoice`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "fe_44" }),
+                            });
+                            const d = await res.json();
+                            alert(d.message || d.error || "Listo");
+                            loadAll();
+                          }}
+                          className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-[11px]"
+                          title="Emitir o generar JSON de Factura Electrónica CR (Hacienda 4.4)"
+                        >
+                          🧾 FE 4.4
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const customUrl = prompt("Link de pago con tarjeta (deja vacío para usar tu pasarela Tilopay/Onvo configurada):", "") || "";
+                            const res = await fetch(`/api/quotes/${qt.id}/invoice`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "card_link", customUrl }),
+                            });
+                            const d = await res.json();
+                            if (d.paymentLinkUrl) {
+                              navigator.clipboard?.writeText(d.paymentLinkUrl);
+                            }
+                            alert(d.message || d.error || "Listo");
+                            loadAll();
+                          }}
+                          className="px-2 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-900 font-bold text-[11px]"
+                          title="Generar y guardar enlace de pago con tarjeta (Tilopay / Onvo / Compra-Click)"
+                        >
+                          💳
+                        </button>
                         {(qt as QuoteRecord & { portalPath?: string }).portalPath && (
                           <button
                             type="button"

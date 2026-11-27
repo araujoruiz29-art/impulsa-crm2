@@ -1418,14 +1418,75 @@ export default function BandejaPage() {
                       🔒 {internalNoteMode ? "Modo Nota Interna ACTIVO" : "Nota interna"}
                     </button>
                     {activeConv.channel === "WHATSAPP" && (
-                      <button
-                        type="button"
-                        onClick={openTemplatesModal}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl"
-                      >
-                        <LayoutTemplate className="w-3.5 h-3.5" />
-                        Plantillas Meta
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={openTemplatesModal}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl"
+                        >
+                          <LayoutTemplate className="w-3.5 h-3.5" />
+                          Plantillas Meta
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sending}
+                          onClick={async () => {
+                            if (!activeConv) return;
+                            setSending(true);
+                            try {
+                              const res = await fetch(`/api/conversations/${activeConv.id}/messages`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  body:
+                                    replyText.trim() ||
+                                    `¡Hola! ¿Cómo te ayudamos hoy en ${companyQuickInfo.brandName}? Toca una opción rápida:`,
+                                  interactiveButtons: [
+                                    { id: "ver_catalogo", title: "🛍️ Ver Catálogo" },
+                                    { id: "ver_ubicacion", title: "📍 Ubicación" },
+                                    { id: "hablar_asesor", title: "👤 Hablar Asesor" },
+                                  ],
+                                }),
+                              });
+                              const d = await res.json();
+                              setReplyText("");
+                              if (d.deliveryInfo) setStatusBanner(d.deliveryInfo);
+                              load();
+                            } finally {
+                              setSending(false);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-3 py-1.5 rounded-xl"
+                          title="Envía un mensaje interactivo oficial de WhatsApp con 3 botones tocables"
+                        >
+                          🎛️ Botones WA
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sending || !replyText.trim()}
+                          onClick={async () => {
+                            if (!activeConv || !replyText.trim()) return;
+                            setSending(true);
+                            try {
+                              const res = await fetch(`/api/conversations/${activeConv.id}/messages`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ body: replyText, sendAsVoiceNote: true }),
+                              });
+                              const d = await res.json();
+                              setReplyText("");
+                              if (d.deliveryInfo) setStatusBanner(d.deliveryInfo);
+                              load();
+                            } finally {
+                              setSending(false);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100 disabled:opacity-45 border border-fuchsia-200 px-3 py-1.5 rounded-xl"
+                          title="Convierte tu texto en nota de voz natural IA (Gemini TTS) y la envía por WhatsApp"
+                        >
+                          🎙️ Audio IA
+                        </button>
+                      </>
                     )}
                   </div>
                   <span className="text-[11px] text-slate-400">

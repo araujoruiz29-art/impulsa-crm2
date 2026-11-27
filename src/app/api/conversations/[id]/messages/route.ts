@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCompanySettings, prisma } from "@/lib/prisma";
-import { sendMetaSocialMessage, sendWhatsAppCloudMessage } from "@/lib/meta";
+import {
+  sendMetaSocialMessage,
+  sendWhatsAppAudioNote,
+  sendWhatsAppCloudMessage,
+  sendWhatsAppInteractiveButtons,
+} from "@/lib/meta";
 import { sendCorporateEmail } from "@/lib/email";
 import { syncCrmFromConversation } from "@/lib/crm-autopilot";
 import { getActiveWorkspaceId, getCurrentSession } from "@/lib/workspace";
@@ -21,6 +26,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       ...(body.aiEnabled !== undefined ? { aiEnabled: Boolean(body.aiEnabled) } : {}),
       ...(body.unreadCount !== undefined ? { unreadCount: Number(body.unreadCount) } : {}),
       ...(body.status !== undefined ? { status: String(body.status) } : {}),
+      ...(body.assignedUserId !== undefined ? { assignedUserId: String(body.assignedUserId) } : {}),
+      ...(body.assignedAgentName !== undefined ? { assignedAgentName: String(body.assignedAgentName) } : {}),
     },
   });
   return NextResponse.json({ conversation: conv });
@@ -72,14 +79,47 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     let deliveryInfo = "";
 
     if (conv.channel === "WHATSAPP") {
-      const wa = await sendWhatsAppCloudMessage({
-        workspaceId: conv.workspaceId,
-        to: conv.externalId,
-        text,
-      });
-      status = wa.simulated ? "SIMULATED" : wa.ok ? "SENT" : "FAILED";
-      externalMessageId = wa.externalMessageId || "";
-      deliveryInfo = wa.info || wa.error || "";
+      if (Array.isArray(body.interactiveButtons) && body.interactiveButtons.length > 0) {
+        const waBtn = await sendWhatsAppInteractiveButtons({
+          workspaceId: conv.workspaceId,
+          to: conv.externalId,
+          bodyText: text,
+          buttons: body.interactiveButtons,
+          footerText: company.brandName,
+        });
+        status = waBtn.simulated ? "SIMULATED" : waBtn.ok ? "SENT" : "FAILED";
+        externalMessageId = waBtn.externalMessageId || "";
+        deliveryInfo = waBtn.info || waBtn.error || "";
+      } else if (body.sendAsVoiceNote === true) {
+        const waAudio = await sendWhatsAppAudioNote({
+          workspaceId: conv.workspaceId,
+          to: conv.externalId,
+          text,
+        });
+        if (waAudio.ok) {
+          status = "SENT";
+          externalMessageId = waAudio.externalMessageId || "";
+          deliveryInfo = waAudio.info || "";
+        } else {
+          const waFallback = await sendWhatsAppCloudMessage({
+            workspaceId: conv.workspaceId,
+            to: conv.externalId,
+            text,
+          });
+          status = waFallback.simulated ? "SIMULATED" : waFallback.ok ? "SENT" : "FAILED";
+          externalMessageId = waFallback.externalMessageId || "";
+          deliveryInfo = `${waAudio.error || "Audio no disponible"} · Enviado como texto.`;
+        }
+      } else {
+        const wa = await sendWhatsAppCloudMessage({
+          workspaceId: conv.workspaceId,
+          to: conv.externalId,
+          text,
+        });
+        status = wa.simulated ? "SIMULATED" : wa.ok ? "SENT" : "FAILED";
+        externalMessageId = wa.externalMessageId || "";
+        deliveryInfo = wa.info || wa.error || "";
+      }
     } else if (conv.channel === "FACEBOOK" || conv.channel === "INSTAGRAM") {
       const social = await sendMetaSocialMessage({
         workspaceId: conv.workspaceId,
@@ -122,6 +162,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         unreadCount: 0,
         lastMessageAt: new Date(),
         lastMessagePreview: text.slice(0, 140),
+        ...(!conv.firstAgentReplyAt ? { firstAgentReplyAt: new Date() } : {}),
       },
     });
 

@@ -209,7 +209,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isPublicClientPage = pathname === "/login" || pathname.startsWith("/proforma/");
+  const isPublicClientPage =
+    pathname === "/login" ||
+    pathname.startsWith("/proforma/") ||
+    pathname.startsWith("/tienda/") ||
+    pathname.startsWith("/agendar/");
 
   useEffect(() => {
     if (typeof window === "undefined") return;

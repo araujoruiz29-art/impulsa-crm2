@@ -19,6 +19,7 @@ import {
   mergeDuplicateWhatsAppThreads,
 } from "@/lib/conversation-merge";
 import { syncCrmFromConversation } from "@/lib/crm-autopilot";
+import { pickNextRoundRobinAgent } from "@/lib/round-robin";
 
 // Official Meta Webhook Verification (GET) - Multi-tenant across all workspaces
 export async function GET(req: NextRequest) {
@@ -196,6 +197,46 @@ export async function POST(req: NextRequest) {
               client.id,
               bodyText
             );
+
+            // #7 Meta 2026 BSUID & Username + #4 Round-Robin Assignment & SLA firstInboundAt
+            const rawBsuid = String(
+              (matchedContact as { user_id?: string; bsuid?: string } | undefined)?.bsuid ||
+                (matchedContact as { user_id?: string } | undefined)?.user_id ||
+                msg.from_user_id ||
+                ""
+            ).trim();
+            const rawWaUsername = String(
+              (matchedContact as { profile?: { username?: string } } | undefined)?.profile?.username || ""
+            ).trim();
+            if (rawBsuid || rawWaUsername) {
+              await prisma.client
+                .update({
+                  where: { id: client.id },
+                  data: {
+                    ...(rawBsuid ? { bsuid: rawBsuid } : {}),
+                    ...(rawWaUsername ? { whatsappUsername: rawWaUsername } : {}),
+                  },
+                })
+                .catch(() => {});
+            }
+            if (!conv.firstInboundAt || !conv.assignedAgentName || rawBsuid) {
+              const rr = !conv.assignedAgentName ? await pickNextRoundRobinAgent(wsId) : null;
+              await prisma.conversation
+                .update({
+                  where: { id: conv.id },
+                  data: {
+                    ...(!conv.firstInboundAt ? { firstInboundAt: new Date() } : {}),
+                    ...(rr ? { assignedUserId: rr.userId, assignedAgentName: rr.agentName } : {}),
+                    ...(rawBsuid ? { bsuid: rawBsuid } : {}),
+                  },
+                })
+                .catch(() => {});
+              if (rr) {
+                await prisma.client
+                  .update({ where: { id: client.id }, data: { assignedTo: rr.agentName } })
+                  .catch(() => {});
+              }
+            }
 
             await prisma.message.create({
               data: {

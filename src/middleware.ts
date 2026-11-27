@@ -4,12 +4,16 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 const PUBLIC_PATHS = [
   "/login",
   "/proforma",
+  "/tienda",
+  "/agendar",
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/logout",
-  "/api/public/quotes",
+  "/api/public",
+  "/api/v1",
   "/api/webhooks/meta",
   "/api/cron/backup",
+  "/api/cron/reminders",
 ];
 
 function isPublicPath(pathname: string): boolean {

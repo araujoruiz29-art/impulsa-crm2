@@ -31,6 +31,10 @@ interface PublicQuoteData {
     discountAmount: number;
     taxAmount: number;
     total: number;
+    paidAmount?: number;
+    paymentLinkUrl?: string;
+    feNumber?: string;
+    feStatus?: string;
     status: string;
     notes: string;
     issueDate: string;
@@ -303,6 +307,18 @@ export default function PublicProformaPortalPage() {
                   <span>Total</span>
                   <span>{formatMoney(quote.total, quote.currency)}</span>
                 </div>
+                {(quote.paidAmount || 0) > 0 && (
+                  <>
+                    <div className="flex justify-between text-emerald-700 font-bold">
+                      <span>Abonado</span>
+                      <span>-{formatMoney(quote.paidAmount || 0, quote.currency)}</span>
+                    </div>
+                    <div className="flex justify-between text-rose-700 font-black pt-1 border-t border-slate-200">
+                      <span>Saldo pendiente</span>
+                      <span>{formatMoney(Math.max(0, quote.total - (quote.paidAmount || 0)), quote.currency)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -390,6 +406,16 @@ export default function PublicProformaPortalPage() {
                   Descargar PDF
                 </a>
               </div>
+              {quote.paymentLinkUrl && (
+                <a
+                  href={quote.paymentLinkUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs transition"
+                >
+                  💳 Pagar con Tarjeta en Línea
+                </a>
+              )}
 
               {verification && (
                 <div className="p-3.5 rounded-xl bg-emerald-950/70 border border-emerald-400/50 text-xs space-y-1">

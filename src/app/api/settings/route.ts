@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCompanySettings, getIntegrationSettings, parseBankAccounts, prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId, getCurrentSession, requireOwnerOrAdmin } from "@/lib/workspace";
 import { isMaskedOrEmpty, maskSecret } from "@/lib/security";
+import { logAuditEvent } from "@/lib/audit";
 
 function sanitizeIntegrations<T extends Record<string, unknown>>(integ: T) {
   return {
@@ -12,6 +13,9 @@ function sanitizeIntegrations<T extends Record<string, unknown>>(integ: T) {
     metaPageAccessToken: maskSecret(String(integ.metaPageAccessToken || "")),
     metaAppSecret: maskSecret(String(integ.metaAppSecret || "")),
     aiApiKey: maskSecret(String(integ.aiApiKey || "")),
+    outboundWebhookSecret: maskSecret(String(integ.outboundWebhookSecret || "")),
+    publicApiKey: maskSecret(String(integ.publicApiKey || "")),
+    feApiKey: maskSecret(String(integ.feApiKey || "")),
   };
 }
 
@@ -76,6 +80,10 @@ export async function PATCH(req: NextRequest) {
           ...(c.defaultValidity !== undefined ? { defaultValidity: String(c.defaultValidity) } : {}),
           ...(c.nextQuoteNumber !== undefined ? { nextQuoteNumber: Number(c.nextQuoteNumber) } : {}),
           ...(c.footerMotto !== undefined ? { footerMotto: String(c.footerMotto) } : {}),
+          ...(c.publicStoreEnabled !== undefined ? { publicStoreEnabled: Boolean(c.publicStoreEnabled) } : {}),
+          ...(c.publicBookingEnabled !== undefined ? { publicBookingEnabled: Boolean(c.publicBookingEnabled) } : {}),
+          ...(c.bookingHoursJson !== undefined ? { bookingHoursJson: String(c.bookingHoursJson) } : {}),
+          ...(c.roundRobinEnabled !== undefined ? { roundRobinEnabled: Boolean(c.roundRobinEnabled) } : {}),
           ...(Array.isArray(c.bankAccounts) ? { bankAccountsJson: JSON.stringify(c.bankAccounts) } : {}),
         },
       });
@@ -123,9 +131,31 @@ export async function PATCH(req: NextRequest) {
           ...(i.aiKnowledgeBase !== undefined ? { aiKnowledgeBase: String(i.aiKnowledgeBase) } : {}),
           ...(i.visionFoundTemplate !== undefined ? { visionFoundTemplate: String(i.visionFoundTemplate) } : {}),
           ...(i.visionFallbackTemplate !== undefined ? { visionFallbackTemplate: String(i.visionFallbackTemplate) } : {}),
+          ...(i.aiVoiceRepliesEnabled !== undefined ? { aiVoiceRepliesEnabled: Boolean(i.aiVoiceRepliesEnabled) } : {}),
+          ...(i.aiVoiceName !== undefined ? { aiVoiceName: String(i.aiVoiceName) } : {}),
+          ...(i.outboundWebhookUrl !== undefined ? { outboundWebhookUrl: String(i.outboundWebhookUrl).trim() } : {}),
+          ...(!isMaskedOrEmpty(i.outboundWebhookSecret)
+            ? { outboundWebhookSecret: String(i.outboundWebhookSecret).trim() }
+            : {}),
+          ...(i.outboundWebhookEvents !== undefined ? { outboundWebhookEvents: String(i.outboundWebhookEvents) } : {}),
+          ...(!isMaskedOrEmpty(i.publicApiKey) ? { publicApiKey: String(i.publicApiKey).trim() } : {}),
+          ...(i.cardPaymentProvider !== undefined ? { cardPaymentProvider: String(i.cardPaymentProvider) } : {}),
+          ...(i.cardPaymentLinkBase !== undefined ? { cardPaymentLinkBase: String(i.cardPaymentLinkBase).trim() } : {}),
+          ...(i.feProvider !== undefined ? { feProvider: String(i.feProvider) } : {}),
+          ...(i.feApiUrl !== undefined ? { feApiUrl: String(i.feApiUrl).trim() } : {}),
+          ...(!isMaskedOrEmpty(i.feApiKey) ? { feApiKey: String(i.feApiKey).trim() } : {}),
+          ...(i.weeklyReportEmail !== undefined ? { weeklyReportEmail: String(i.weeklyReportEmail).trim() } : {}),
         },
       });
     }
+
+    await logAuditEvent({
+      workspaceId,
+      action: "SETTINGS_UPDATED",
+      entityType: "Settings",
+      entityId: workspaceId,
+      summary: "Actualizó configuración de empresa o integraciones.",
+    });
 
     const [company, integrations] = await Promise.all([
       getCompanySettings(workspaceId),

@@ -296,3 +296,189 @@ export async function replyToMetaComment(opts: {
 
   return { ok: publicReplied || privateReplied, publicReplied, privateReplied };
 }
+
+// #6: Official WhatsApp Cloud API Interactive Reply Buttons (up to 3 clickable buttons!)
+export async function sendWhatsAppInteractiveButtons(opts: {
+  workspaceId?: string;
+  to: string;
+  bodyText: string;
+  buttons: Array<{ id: string; title: string }>;
+  footerText?: string;
+}) {
+  const cfg = await getIntegrationSettings(opts.workspaceId);
+  const to = normalizeCRPhone(opts.to);
+  if (!to) return { ok: false, simulated: true, error: "Número de WhatsApp inválido." };
+
+  const cleanButtons = opts.buttons
+    .slice(0, 3)
+    .map((b, i) => ({
+      type: "reply",
+      reply: {
+        id: (b.id || `btn_${i + 1}`).slice(0, 250),
+        title: (b.title || `Opción ${i + 1}`).slice(0, 20),
+      },
+    }));
+
+  if (cleanButtons.length === 0) {
+    return sendWhatsAppCloudMessage({ workspaceId: opts.workspaceId, to, text: opts.bodyText });
+  }
+
+  if (!cfg.metaAccessToken || !cfg.metaPhoneNumberId) {
+    return {
+      ok: true,
+      simulated: true,
+      externalMessageId: `sim-wa-btn-${Date.now()}`,
+      info: "Modo simulador: mensaje con botones interactivos guardado localmente.",
+    };
+  }
+
+  const endpoint = `https://graph.facebook.com/v21.0/${encodeURIComponent(cfg.metaPhoneNumberId)}/messages`;
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: opts.bodyText.slice(0, 1024) },
+      ...(opts.footerText ? { footer: { text: opts.footerText.slice(0, 60) } } : {}),
+      action: { buttons: cleanButtons },
+    },
+  };
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${cfg.metaAccessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false, simulated: false, error: data?.error?.message || `Error Meta Interactive (${res.status})` };
+  }
+  return {
+    ok: true,
+    simulated: false,
+    externalMessageId: data?.messages?.[0]?.id || `wa-btn-${Date.now()}`,
+    info: "Mensaje con botones interactivos enviado vía WhatsApp Cloud API.",
+  };
+}
+
+function pcm24kToWavBuffer(pcm: Buffer): Buffer {
+  const sampleRate = 24000;
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+// #10: Optional AI Outbound Voice Note Reply via Gemini TTS + Meta Media Upload (falls back to text if unavailable)
+export async function sendWhatsAppAudioNote(opts: {
+  workspaceId?: string;
+  to: string;
+  text: string;
+  voiceName?: string;
+}) {
+  const cfg = await getIntegrationSettings(opts.workspaceId);
+  const to = normalizeCRPhone(opts.to);
+  if (!to || !cfg.aiApiKey || !cfg.metaAccessToken || !cfg.metaPhoneNumberId) {
+    return { ok: false, fallbackText: true, error: "Audio IA requiere Gemini API + Meta Cloud API." };
+  }
+
+  try {
+    const voice = (opts.voiceName || cfg.aiVoiceName || "Aoede").trim();
+    const ttsUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${encodeURIComponent(
+      cfg.aiApiKey
+    )}`;
+    const ttsRes = await fetch(ttsUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: `Habla como asesor comercial amable y natural en español latinoamericano. Lee esto breve y claro:\n\n${opts.text.slice(0, 480)}`,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        },
+      }),
+    });
+    if (!ttsRes.ok) {
+      return { ok: false, fallbackText: true, error: `Gemini TTS HTTP ${ttsRes.status}` };
+    }
+    const ttsData = await ttsRes.json().catch(() => ({}));
+    const b64 = ttsData?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!b64) return { ok: false, fallbackText: true, error: "Audio vacío" };
+
+    const wavBuf = pcm24kToWavBuffer(Buffer.from(b64, "base64"));
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("file", new Blob([new Uint8Array(wavBuf)], { type: "audio/wav" }), "respuesta-ia.wav");
+
+    const uploadRes = await fetch(
+      `https://graph.facebook.com/v21.0/${encodeURIComponent(cfg.metaPhoneNumberId)}/media`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfg.metaAccessToken}` },
+        body: form,
+      }
+    );
+    const uploadData = await uploadRes.json().catch(() => ({}));
+    if (!uploadRes.ok || !uploadData.id) {
+      return { ok: false, fallbackText: true, error: uploadData?.error?.message || "No se pudo subir audio a Meta." };
+    }
+
+    const sendRes = await fetch(
+      `https://graph.facebook.com/v21.0/${encodeURIComponent(cfg.metaPhoneNumberId)}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cfg.metaAccessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "audio",
+          audio: { id: String(uploadData.id) },
+        }),
+      }
+    );
+    const sendData = await sendRes.json().catch(() => ({}));
+    if (!sendRes.ok) {
+      return { ok: false, fallbackText: true, error: sendData?.error?.message || "Error enviando audio." };
+    }
+    return {
+      ok: true,
+      simulated: false,
+      externalMessageId: sendData?.messages?.[0]?.id || `wa-audio-${Date.now()}`,
+      info: "🎙️ Nota de voz IA enviada vía WhatsApp Cloud API.",
+    };
+  } catch (err) {
+    return { ok: false, fallbackText: true, error: err instanceof Error ? err.message : "Error audio IA" };
+  }
+}

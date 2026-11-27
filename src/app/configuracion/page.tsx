@@ -18,7 +18,9 @@ import {
   Upload,
   KeyRound,
   Power,
+  Rocket,
 } from "lucide-react";
+import { VanguardHubPanel } from "@/components/VanguardHubPanel";
 
 interface TeamMember {
   id: string;
@@ -82,7 +84,7 @@ interface EmailAccountItem {
 }
 
 export default function ConfiguracionPage() {
-  const [tab, setTab] = useState<"company" | "email" | "meta" | "ai" | "backup" | "team" | "admin">("company");
+  const [tab, setTab] = useState<"company" | "email" | "meta" | "ai" | "backup" | "team" | "vanguardia" | "admin">("company");
   const [company, setCompany] = useState<Record<string, unknown>>({});
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [integrations, setIntegrations] = useState<Record<string, unknown>>({});
@@ -311,6 +313,7 @@ export default function ConfiguracionPage() {
           { id: "meta", label: "Meta Cloud API & WhatsApp", icon: MessageCircle },
           { id: "ai", label: "Agente de IA", icon: Bot },
           { id: "team", label: "Equipo y Vendedores", icon: Users },
+          { id: "vanguardia", label: "Vanguardia · Tienda · API · Auditoría", icon: Rocket },
           { id: "backup", label: "Respaldos y Nube", icon: ShieldCheck },
           ...(userRole === "SUPERADMIN"
             ? [{ id: "admin", label: "Admin Compañías (SaaS)", icon: Crown }]
@@ -1781,6 +1784,18 @@ export default function ConfiguracionPage() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* TAB VANGUARDIA: TIENDA WEB, AGENDA PUBLICA, ROUND-ROBIN, VOICE IA, API/ODOO, FE 4.4 & AUDIT */}
+        {tab === "vanguardia" && (
+          <VanguardHubPanel
+            workspaceId={String(company.id || "default")}
+            company={company}
+            setCompany={setCompany}
+            integrations={integrations}
+            setIntegrations={setIntegrations}
+            onStatus={(msg) => setStatusMsg(msg)}
+          />
         )}
 
         {tab !== "backup" && tab !== "email" && tab !== "team" && tab !== "admin" && (
