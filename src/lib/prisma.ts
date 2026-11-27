@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type CompanySettings } from "@prisma/client";
 import { getActiveWorkspaceId } from "./workspace";
 
 const globalForPrisma = globalThis as unknown as {
@@ -87,9 +87,12 @@ export async function getCompanySettings(explicitWorkspaceId?: string) {
       });
     } else {
       const now = new Date();
-      return {
+      const fallback: CompanySettings = {
         id: workspaceId,
         ownerUserId: "",
+        active: true,
+        plan: "PRO",
+        suspendedReason: "",
         companyName: "Mi Empresa",
         brandName: "Mi Empresa",
         primaryColor: "#22115d",
@@ -113,9 +116,15 @@ export async function getCompanySettings(explicitWorkspaceId?: string) {
         bankAccountsJson: "[]",
         logoPath: "",
         sinpeLogoPath: "",
+        publicStoreEnabled: true,
+        publicBookingEnabled: true,
+        bookingHoursJson: '{"days":[1,2,3,4,5],"start":"08:00","end":"17:00","slotMinutes":30}',
+        roundRobinEnabled: false,
+        roundRobinIndex: 0,
         createdAt: now,
         updatedAt: now,
       };
+      return fallback;
     }
   }
   return settings;
