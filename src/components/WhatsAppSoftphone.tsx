@@ -165,7 +165,26 @@ export function WhatsAppSoftphone() {
   }, []);
 
   const setupPeerConnection = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Tu navegador no soporta audio WebRTC. Usa Chrome o Edge actualizado sobre HTTPS.");
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (mediaErr) {
+      const name = mediaErr instanceof Error ? mediaErr.name : "";
+      if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        throw new Error(
+          "No se detectó micrófono en esta computadora. Conecta audífonos con micrófono (o usa el CRM desde tu celular) para hablar por WhatsApp."
+        );
+      }
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        throw new Error(
+          "El navegador bloqueó el micrófono. Haz clic en el candado junto a la dirección web y permite el micrófono."
+        );
+      }
+      throw mediaErr;
+    }
     localStreamRef.current = stream;
 
     const pc = new RTCPeerConnection({

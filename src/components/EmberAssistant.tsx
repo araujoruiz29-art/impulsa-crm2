@@ -185,25 +185,27 @@ export function EmberAssistant() {
 
   return (
     <>
-      {/* Floating Ember Launcher Button */}
+      {/* Floating Ember Launcher Button (compact circle so it never blocks Enviar or Guardar buttons) */}
       {!open && (
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Abrir Ember, agente de ayuda IA"
-          className="fixed bottom-5 right-5 z-50 group flex items-center gap-2.5 pl-3.5 pr-4 py-2.5 rounded-full text-white font-bold text-xs shadow-xl hover:scale-105 active:scale-95 transition-all"
+          title="Ember IA · ¿En qué te ayudo?"
+          className={`fixed right-4 z-40 group flex items-center justify-center gap-2 w-11 h-11 hover:w-auto hover:px-3.5 rounded-full text-white font-bold text-xs shadow-lg hover:scale-105 active:scale-95 transition-all ${
+            pathname.startsWith("/bandeja") ? "bottom-32" : "bottom-4"
+          }`}
           style={{
             background: "linear-gradient(135deg, #22115d 0%, #c026d3 55%, #f97316 100%)",
-            boxShadow: "0 12px 30px rgba(192, 38, 211, 0.38)",
+            boxShadow: "0 8px 22px rgba(192, 38, 211, 0.34)",
           }}
         >
-          <span className="relative flex items-center justify-center w-7 h-7 rounded-full bg-white/20">
-            <Flame className="w-4 h-4 text-amber-300 fill-amber-300" />
-            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#22115d]" />
+          <span className="relative flex items-center justify-center shrink-0">
+            <Flame className="w-5 h-5 text-amber-300 fill-amber-300" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#22115d]" />
           </span>
-          <span className="flex flex-col items-start leading-tight">
-            <span className="text-[12px] font-extrabold tracking-tight">Ember IA</span>
-            <span className="text-[10px] font-medium text-white/85">¿En qué te ayudo?</span>
+          <span className="hidden group-hover:inline whitespace-nowrap text-[11px] font-extrabold tracking-tight pr-0.5">
+            Ember IA
           </span>
         </button>
       )}
