@@ -27,11 +27,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const integrations = await getIntegrationSettings(workspaceId);
     const filename = `${quote.number}-${sanitizeFilename(quote.clientCompany)}.pdf`;
     const pdfBytes = await generateProformaPdf(quote);
-    const signedPdfPath = `/api/quotes/${quote.id}/pdf?sig=${signQuotePdfToken(quote.id)}`;
+    const sig = signQuotePdfToken(quote.id);
+    const signedPdfPath = `/api/quotes/${quote.id}/pdf?sig=${sig}`;
+    const publicBase = integrations.metaPublicWebhookUrl
+      ? integrations.metaPublicWebhookUrl.replace(/\/api\/webhooks\/meta.*$/, "")
+      : "";
+    const portalUrl = publicBase ? `${publicBase}/proforma/${quote.id}?sig=${sig}` : "";
 
     const defaultMessage =
       body.message ||
-      `Estimado(a) ${quote.clientContact || quote.clientCompany},\n\nAdjunto Factura Proforma #${quote.number} solicitada para su revisión (${quote.jobTitle || "Cotización"}) por un total de ${formatMoney(quote.total, quote.currency)}.\n\nQuedamos atentos a cualquier consulta.\nSaludos,\n${quote.seller || company.defaultSeller}\n${company.brandName} | Tel: ${company.phone} | WhatsApp: ${company.whatsapp}`;
+      `Estimado(a) ${quote.clientContact || quote.clientCompany},\n\nAdjunto Factura Proforma #${quote.number} solicitada para su revisión (${quote.jobTitle || "Cotización"}) por un total de ${formatMoney(quote.total, quote.currency)}.${
+        portalUrl ? `\n\n👉 Puedes verla, aprobarla en 1 clic o subir tu comprobante SINPE aquí:\n${portalUrl}` : ""
+      }\n\nQuedamos atentos a cualquier consulta.\nSaludos,\n${quote.seller || company.defaultSeller}\n${company.brandName} | Tel: ${company.phone} | WhatsApp: ${company.whatsapp}`;
 
     const results: Record<string, unknown> = { filename };
     const sentChannels: string[] = quote.sentVia ? quote.sentVia.split(",").filter(Boolean) : [];
@@ -104,9 +111,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         return NextResponse.json({ error: "El cliente no tiene teléfono/WhatsApp configurado." }, { status: 400 });
       }
 
-      const publicBase = integrations.metaPublicWebhookUrl
-        ? integrations.metaPublicWebhookUrl.replace(/\/api\/webhooks\/meta.*$/, "")
-        : "";
       const documentUrl = publicBase ? `${publicBase}${signedPdfPath}` : undefined;
 
       const waRes = await sendWhatsAppCloudMessage({

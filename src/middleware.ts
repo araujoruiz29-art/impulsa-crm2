@@ -3,9 +3,11 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
 const PUBLIC_PATHS = [
   "/login",
+  "/proforma",
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/logout",
+  "/api/public/quotes",
   "/api/webhooks/meta",
   "/api/cron/backup",
 ];

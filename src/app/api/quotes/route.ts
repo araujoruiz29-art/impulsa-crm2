@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCompanySettings, prisma } from "@/lib/prisma";
 import { calculateQuoteTotals, formatMoney } from "@/lib/format";
 import { getActiveWorkspaceId } from "@/lib/workspace";
+import { signQuotePdfToken } from "@/lib/security";
 
 export async function GET(req: NextRequest) {
   const workspaceId = await getActiveWorkspaceId();
@@ -31,7 +32,12 @@ export async function GET(req: NextRequest) {
     orderBy: { number: "desc" },
   });
 
-  return NextResponse.json({ quotes });
+  return NextResponse.json({
+    quotes: quotes.map((qt) => ({
+      ...qt,
+      portalPath: `/proforma/${qt.id}?sig=${signQuotePdfToken(qt.id)}`,
+    })),
+  });
 }
 
 export async function POST(req: NextRequest) {

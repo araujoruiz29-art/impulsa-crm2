@@ -26,8 +26,42 @@ import {
   LogOut,
   FileQuestion,
   Megaphone,
+  Smartphone,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { EmberAssistant } from "@/components/EmberAssistant";
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+function playLiveAlertChime() {
+  try {
+    const AudioCtx =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    [784, 1046.5].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+      gain.gain.setValueAtTime(0.001, now + idx * 0.14);
+      gain.gain.linearRampToValueAtTime(0.18, now + idx * 0.14 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.14);
+      osc.stop(now + idx * 0.14 + 0.3);
+    });
+    setTimeout(() => ctx.close().catch(() => {}), 700);
+  } catch {
+    // Ignore autoplay restriction until user interacts
+  }
+}
 
 interface WorkspaceSummary {
   id: string;
@@ -92,6 +126,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [newWsOpen, setNewWsOpen] = useState(false);
   const [creatingWs, setCreatingWs] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [liveToast, setLiveToast] = useState("");
+  const lastAlertRef = React.useRef<{ alerts: number; unread: number } | null>(null);
 
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [activeWsId, setActiveWsId] = useState("default");
@@ -137,9 +175,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }
       }
       if (dashData?.kpis) {
+        const nextAlerts = dashData.kpis.openAlertsCount || 0;
+        const nextUnread = dashData.kpis.unreadMessages || 0;
+        if (lastAlertRef.current) {
+          const newHotAlert = nextAlerts > lastAlertRef.current.alerts;
+          const newMsg = nextUnread > lastAlertRef.current.unread;
+          if (newHotAlert || newMsg) {
+            const msg = newHotAlert
+              ? `🔥 ¡Nuevo Aviso al Vendedor! Tienes ${nextAlerts} clientes calientes listos para cerrar.`
+              : `💬 Nuevo mensaje recibido en tu Bandeja (${nextUnread} sin leer).`;
+            setLiveToast(msg);
+            if (soundEnabled) playLiveAlertChime();
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+              try {
+                new Notification("impulsa CRM", { body: msg, icon: "/brand/impulsa-symbol.svg" });
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+        lastAlertRef.current = { alerts: nextAlerts, unread: nextUnread };
         setStatus({
-          alerts: dashData.kpis.openAlertsCount || 0,
-          unread: dashData.kpis.unreadMessages || 0,
+          alerts: nextAlerts,
+          unread: nextUnread,
           whatsappConnected: Boolean(dashData.connections?.whatsappConnected),
           emailConnected: Boolean(dashData.connections?.emailConnected),
           aiConnected: Boolean(dashData.connections?.aiConnected),
@@ -150,12 +209,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  useEffect(() => {
-    if (pathname === "/login") return;
-    loadShellData();
-  }, [pathname]);
+  const isPublicClientPage = pathname === "/login" || pathname.startsWith("/proforma/");
 
-  if (pathname === "/login") {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+    const savedSound = localStorage.getItem("impulsa_sound_alerts");
+    if (savedSound === "0") setSoundEnabled(false);
+
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+  }, []);
+
+  useEffect(() => {
+    if (isPublicClientPage) return;
+    loadShellData();
+    const timer = setInterval(() => {
+      loadShellData();
+    }, 30000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, soundEnabled]);
+
+  if (isPublicClientPage) {
     return <>{children}</>;
   }
 
@@ -427,8 +509,49 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* Right: Multi-company Workspace Switcher + Primary CTA */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Right: PWA Install + Live Alerts Toggle + Multi-company Workspace Switcher */}
+          <div className="flex items-center gap-2 shrink-0">
+            {installPrompt && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await installPrompt.prompt();
+                  const choice = await installPrompt.userChoice;
+                  if (choice.outcome === "accepted") setInstallPrompt(null);
+                }}
+                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-[#22115d] text-xs font-bold transition"
+                title="Instala impulsa CRM como app en tu celular o computadora"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                Instalar App
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !soundEnabled;
+                setSoundEnabled(next);
+                localStorage.setItem("impulsa_sound_alerts", next ? "1" : "0");
+                if (next) {
+                  playLiveAlertChime();
+                  if (typeof Notification !== "undefined" && Notification.permission === "default") {
+                    Notification.requestPermission().catch(() => {});
+                  }
+                }
+              }}
+              className={`p-1.5 rounded-xl border text-xs transition ${
+                soundEnabled
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                  : "bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100"
+              }`}
+              title={
+                soundEnabled
+                  ? "Alertas con sonido activadas (clic para silenciar)"
+                  : "Alertas silenciadas (clic para activar sonido y notificaciones)"
+              }
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </button>
             {/* Workspace Switcher Dropdown (Impulsa signature) */}
             <div className="relative">
               <button
@@ -623,6 +746,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       )}
+      {/* Live Alert Toast Banner */}
+      {liveToast && (
+        <div className="fixed top-16 right-4 z-50 max-w-sm bg-[#1e1046] text-white px-4 py-3 rounded-2xl shadow-2xl border border-indigo-400/40 flex items-center gap-3 text-xs">
+          <span className="flex-1 font-semibold leading-snug">{liveToast}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLiveToast("");
+              router.push("/bandeja");
+            }}
+            className="px-2.5 py-1 rounded-lg bg-amber-400 text-[#1e1046] font-extrabold shrink-0"
+          >
+            Ver
+          </button>
+          <button
+            type="button"
+            onClick={() => setLiveToast("")}
+            className="text-white/70 hover:text-white font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Global In-App AI Help Agent: Ember */}
       <EmberAssistant />
     </div>

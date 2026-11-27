@@ -511,6 +511,20 @@ function CotizacionesInner() {
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="inline-flex items-center gap-1">
+                        {(qt as QuoteRecord & { portalPath?: string }).portalPath && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = `${window.location.origin}${(qt as QuoteRecord & { portalPath?: string }).portalPath}`;
+                              navigator.clipboard?.writeText(url);
+                              alert(`🔗 Enlace del Portal Cliente copiado:\n${url}\n\nEl cliente puede aprobar en 1 clic o subir su comprobante SINPE.`);
+                            }}
+                            className="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-[#22115d] font-bold text-[11px]"
+                            title="Copiar enlace interactivo del Portal Cliente (aprobar en 1 clic + subir SINPE)"
+                          >
+                            🔗 Portal
+                          </button>
+                        )}
                         <a
                           href={`/api/quotes/${qt.id}/pdf`}
                           target="_blank"

@@ -61,6 +61,12 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         purpose:
           "Abre a Ember, tu agente de ayuda IA entrenado con todo el Manual de Uso y Conexiones de impulsa CRM. Respóndele dudas paso a paso en lenguaje natural, pide guiones o usa sus botones de acceso directo para saltar al módulo que necesitas.",
       },
+      {
+        control: "📲 Instalar App (PWA) y 🔔 Alertas en Vivo con Sonido",
+        location: "Barra superior derecha (junto al selector de empresa)",
+        purpose:
+          "Permite instalar impulsa CRM como aplicación en tu celular (Android/iPhone) o computadora sin tiendas externas, y activa alertas con sonido + notificación cuando entra un mensaje o una «🔥 Compra real».",
+      },
     ],
   },
   {
@@ -191,10 +197,10 @@ export const MANUAL_SECTIONS: ManualSection[] = [
           "Abre la conversación directo en WhatsApp Web/Desktop, o borra ese chat individual (pide confirmación).",
       },
       {
-        control: "Sugerencia IA (Borrador) / Enviar",
+        control: "Sugerencia IA / ⚡ Rápidas (/) / 🔒 Nota interna / Enviar",
         location: "Parte inferior del chat",
         purpose:
-          "«Sugerencia IA» redacta una respuesta recomendada para que la revises antes de enviar. «Enviar» manda el mensaje real por WhatsApp Cloud API o por correo SMTP (eligiendo desde qué cuenta enviar).",
+          "«Sugerir respuesta con IA» redacta un borrador comercial leyendo tu catálogo. «⚡ Rápidas (/)» (o escribir / en el cuadro) inserta al instante tus datos de SINPE, ubicación, envíos o horarios. «🔒 Nota interna» guarda comentarios privados amarillos entre vendedores que el cliente nunca ve. «Enviar» manda el mensaje real por WhatsApp, IG, Messenger o Correo.",
       },
     ],
   },
@@ -402,6 +408,12 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         location: "Columna «Estado» en la tabla",
         purpose:
           "Actualiza el estado de la proforma y refleja el avance en los KPIs del Tablero.",
+      },
+      {
+        control: "🔗 Portal Cliente (Aprobar en 1 clic + Subir Comprobante SINPE IA)",
+        location: "Columna «Acciones Rápidas» (botón «🔗 Portal»)",
+        purpose:
+          "Copia un enlace seguro firmado para el cliente: desde su celular puede ver la proforma con tu logo, descargar el PDF, pulsar «✅ Aprobar Proforma» o subir la captura de su SINPE Móvil / transferencia para que la IA valide monto, banco y referencia, mueva el negocio a GANADO y dispare un Aviso al Vendedor.",
       },
       {
         control: "Ver PDF (↗) y Descargar PDF (⬇)",

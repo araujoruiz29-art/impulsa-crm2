@@ -1,0 +1,20 @@
+{
+  "name": "impulsa CRM · Ventas, Proformas e IA",
+  "short_name": "impulsa CRM",
+  "description": "CRM omnicanal con WhatsApp, Instagram, Messenger, Proformas PDF, Meta Ads y Ember IA.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1e1046",
+  "theme_color": "#1e1046",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/brand/impulsa-symbol.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

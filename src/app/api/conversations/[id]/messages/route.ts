@@ -3,7 +3,7 @@ import { getCompanySettings, prisma } from "@/lib/prisma";
 import { sendMetaSocialMessage, sendWhatsAppCloudMessage } from "@/lib/meta";
 import { sendCorporateEmail } from "@/lib/email";
 import { syncCrmFromConversation } from "@/lib/crm-autopilot";
-import { getActiveWorkspaceId } from "@/lib/workspace";
+import { getActiveWorkspaceId, getCurrentSession } from "@/lib/workspace";
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const workspaceId = await getActiveWorkspaceId();
@@ -45,6 +45,28 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const company = await getCompanySettings(conv.workspaceId);
+
+    // Private Internal Team Note (never sent to external customer channel!)
+    if (body.isInternalNote === true) {
+      const session = await getCurrentSession();
+      const noteMsg = await prisma.message.create({
+        data: {
+          conversationId: conv.id,
+          direction: "INTERNAL",
+          senderName: session?.email ? `${company.defaultSeller} (${session.email})` : company.defaultSeller,
+          senderRole: "INTERNAL_NOTE",
+          subject: "",
+          body: text,
+          externalMessageId: "",
+          status: "INTERNAL",
+        },
+      });
+      return NextResponse.json(
+        { message: noteMsg, deliveryInfo: "🔒 Nota interna guardada (el cliente NO la ve)." },
+        { status: 201 }
+      );
+    }
+
     let status = "SENT";
     let externalMessageId = "";
     let deliveryInfo = "";

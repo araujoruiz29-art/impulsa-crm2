@@ -102,7 +102,7 @@ export function EmberAssistant() {
     }
   }, [messages, open, loading]);
 
-  if (pathname === "/login") return null;
+  if (pathname === "/login" || pathname.startsWith("/proforma/")) return null;
 
   const quickChips =
     Object.entries(PAGE_SUGGESTIONS).find(([key]) =>
