@@ -27,7 +27,9 @@ function isPublicPath(pathname: string): boolean {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/brand/") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    pathname === "/manifest.json" ||
+    pathname === "/sw.js"
   ) {
     return true;
   }

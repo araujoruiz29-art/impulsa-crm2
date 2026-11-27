@@ -304,7 +304,13 @@ export async function sendWhatsAppInteractiveButtons(opts: {
   bodyText: string;
   buttons: Array<{ id: string; title: string }>;
   footerText?: string;
-}) {
+}): Promise<{
+  ok: boolean;
+  simulated: boolean;
+  externalMessageId?: string;
+  info?: string;
+  error?: string;
+}> {
   const cfg = await getIntegrationSettings(opts.workspaceId);
   const to = normalizeCRPhone(opts.to);
   if (!to) return { ok: false, simulated: true, error: "Número de WhatsApp inválido." };
@@ -395,7 +401,14 @@ export async function sendWhatsAppAudioNote(opts: {
   to: string;
   text: string;
   voiceName?: string;
-}) {
+}): Promise<{
+  ok: boolean;
+  simulated?: boolean;
+  fallbackText?: boolean;
+  externalMessageId?: string;
+  info?: string;
+  error?: string;
+}> {
   const cfg = await getIntegrationSettings(opts.workspaceId);
   const to = normalizeCRPhone(opts.to);
   if (!to || !cfg.aiApiKey || !cfg.metaAccessToken || !cfg.metaPhoneNumberId) {
