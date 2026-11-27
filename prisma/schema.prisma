@@ -498,3 +498,47 @@ model AuditLog {
   @@index([workspaceId])
   @@index([createdAt])
 }
+
+model WhatsAppCall {
+  id              String    @id @default(cuid())
+  workspaceId     String    @default("default")
+  externalCallId  String    @default("")
+  direction       String    @default("INBOUND") // "INBOUND" | "OUTBOUND"
+  status          String    @default("RINGING") // "RINGING" | "ACTIVE" | "ENDED" | "REJECTED" | "MISSED"
+  fromPhone       String    @default("")
+  toPhone         String    @default("")
+  callerName      String    @default("")
+  clientId        String?
+  agentEmail      String    @default("")
+  offerSdp        String    @default("")
+  answerSdp       String    @default("")
+  durationSeconds Int       @default(0)
+  transcript      String    @default("")
+  aiSummary       String    @default("")
+  startedAt       DateTime  @default(now())
+  answeredAt      DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([externalCallId])
+  @@index([status])
+}
+
+model InnovationRadarItem {
+  id           String   @id @default(cuid())
+  workspaceId  String   @default("default")
+  category     String   @default("CRM_IA") // "META_WA" | "CRM_IA" | "VENTAS_ADS" | "CR_PAGOS"
+  title        String
+  summary      String
+  sourceUrl    String   @default("")
+  impact       String   @default("ALTO")   // "ALTO" | "MEDIO" | "BAJO"
+  effort       String   @default("MEDIO")  // "RAPIDO" | "MEDIO" | "PROYECTO"
+  status       String   @default("NUEVA")  // "NUEVA" | "APROBADA" | "IMPLEMENTADA" | "DESCARTADA"
+  discoveredAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([status])
+}

@@ -352,6 +352,48 @@ export const CONNECTION_GUIDES: ConnectionGuideSection[] = [
       { field: "Modo Global", whereToFind: "IA Automática 24/7 o Respuesta Manual Total (1 clic en Bandeja o Configuración)" },
     ],
   },
+  {
+    id: "vanguardia",
+    number: "06",
+    title: "VoIP WhatsApp Gratis, Webhooks (Odoo / n8n / Zapier), Tarjeta y FE CR 4.4",
+    subtitle: "Activa llamadas de voz WebRTC en WhatsApp ($0 entrantes), conectores externos, pagos con tarjeta y Factura Electrónica 4.4.",
+    badge: "VOIP · API · HACIENDA 4.4",
+    prerequisites: [
+      "Tener conectado tu número de WhatsApp Cloud API (para VoIP WhatsApp).",
+      "Para Odoo / n8n / Zapier / Make: tener una URL Webhook HTTPS del sistema destino.",
+    ],
+    steps: [
+      {
+        title: "Activar VoIP Oficial de WhatsApp (Llamadas entrantes $0/min)",
+        link: { label: "Abrir Meta for Developers", url: "https://developers.facebook.com/apps" },
+        details: [
+          "En tu App de Meta → WhatsApp → Configuration → Webhooks → haz clic en «Manage» y suscribe el campo «calls» (usa la misma URL https://impulsa-crm2.vercel.app/api/webhooks/meta).",
+          "En impulsa CRM → Conexiones y empresa → pestaña «Vanguardia» → pulsa «📞 Activar Llamadas WA».",
+          "Listo: tus clientes verán el ícono 📞 en WhatsApp y cuando llamen sonará el Softphone WebRTC directo en tu CRM (con botón «Grabar IA» para resumen automático con Gemini).",
+        ],
+      },
+      {
+        title: "Conectar Odoo, n8n, Zapier, Make o Shopify (Bidireccional)",
+        link: { label: "Abrir Pestaña Vanguardia", url: "https://impulsa-crm2.vercel.app/configuracion" },
+        details: [
+          "Para enviar eventos desde impulsa CRM hacia Odoo/n8n/Zapier: pega la URL HTTPS destino en «Webhook de Salida», opcionalmente agrega un Secreto HMAC, guarda y pulsa «Probar Webhook».",
+          "Para recibir leads desde Shopify / WooCommerce / Odoo hacia impulsa CRM: pulsa «🔑 Generar API Key», guarda y envía POST a https://impulsa-crm2.vercel.app/api/v1/leads con header Authorization: Bearer <tu_api_key>.",
+        ],
+      },
+      {
+        title: "Configurar Pagos con Tarjeta (Tilopay / Onvo) y Facturación Electrónica CR 4.4",
+        details: [
+          "En «Pagos con Tarjeta», selecciona tu pasarela (Tilopay, Onvo Pay, BAC Compra-Click o Stripe) y pega tu URL base HTTPS de cobro.",
+          "En «Facturación Electrónica CR (Hacienda 4.4)», elige tu proveedor (GTI, Alanube, FinanzaPro o API propia), pega el endpoint y token, y guarda. Desde /cotizaciones podrás emitir FE 4.4 y generar links de pago en 1 clic.",
+        ],
+      },
+    ],
+    crmFields: [
+      { field: "Webhook Meta (VoIP)", whereToFind: "Suscribir campo «calls» en Meta Developers → WhatsApp → Webhooks" },
+      { field: "Webhook de Salida + API Key", whereToFind: "Conexiones y empresa → Pestaña Vanguardia" },
+      { field: "Pasarela Tarjeta & Emisor FE 4.4", whereToFind: "Conexiones y empresa → Pestaña Vanguardia" },
+    ],
+  },
 ];
 
 export const TROUBLESHOOTING_ROWS = [

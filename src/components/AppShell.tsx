@@ -31,6 +31,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { EmberAssistant } from "@/components/EmberAssistant";
+import { WhatsAppSoftphone } from "@/components/WhatsAppSoftphone";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -773,6 +774,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       )}
+
+      {/* Global WhatsApp Business Calling VoIP Softphone (WebRTC) */}
+      <WhatsAppSoftphone />
 
       {/* Global In-App AI Help Agent: Ember */}
       <EmberAssistant />

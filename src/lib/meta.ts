@@ -495,3 +495,162 @@ export async function sendWhatsAppAudioNote(opts: {
     return { ok: false, fallbackText: true, error: err instanceof Error ? err.message : "Error audio IA" };
   }
 }
+
+// VoIP Oficial WhatsApp Business Calling API (WebRTC):
+// 1. Enable/disable the official Call icon & callback permissions on the business WhatsApp number
+export async function configureWhatsAppCallingSettings(opts: {
+  workspaceId?: string;
+  enabled: boolean;
+}): Promise<{ ok: boolean; info?: string; error?: string }> {
+  const cfg = await getIntegrationSettings(opts.workspaceId);
+  if (!cfg.metaAccessToken || !cfg.metaPhoneNumberId) {
+    return {
+      ok: false,
+      error: "Conecta primero tu Token Permanente y Phone Number ID de WhatsApp Cloud API.",
+    };
+  }
+  try {
+    const endpoint = `https://graph.facebook.com/v21.0/${encodeURIComponent(cfg.metaPhoneNumberId)}/settings`;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${cfg.metaAccessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        calling: {
+          status: opts.enabled ? "ENABLED" : "DISABLED",
+          call_icon_visibility: opts.enabled ? "DEFAULT" : "DISABLE_ALL",
+          callback_permission_status: opts.enabled ? "ENABLED" : "DISABLED",
+        },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        ok: false,
+        error:
+          data?.error?.message ||
+          `Meta respondió HTTP ${res.status}. Verifica que tu WABA tenga Calling API habilitado.`,
+      };
+    }
+    return {
+      ok: true,
+      info: opts.enabled
+        ? "✅ Llamadas VoIP activadas en tu número de WhatsApp Business (ícono 📞 visible y llamadas entrantes gratis)."
+        : "🔕 Llamadas VoIP desactivadas en tu número de WhatsApp Business.",
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Error configurando Calling API." };
+  }
+}
+
+// 2. Send official interactive Call Permission Request inside an active 24h WhatsApp window
+export async function sendWhatsAppCallPermissionRequest(opts: {
+  workspaceId?: string;
+  to: string;
+  bodyText?: string;
+}): Promise<{ ok: boolean; externalMessageId?: string; info?: string; error?: string }> {
+  const cfg = await getIntegrationSettings(opts.workspaceId);
+  const to = normalizeCRPhone(opts.to);
+  if (!to) return { ok: false, error: "Número de WhatsApp inválido." };
+  if (!cfg.metaAccessToken || !cfg.metaPhoneNumberId) {
+    return { ok: false, error: "Conecta primero Meta Cloud API en Conexiones y empresa." };
+  }
+  try {
+    const endpoint = `https://graph.facebook.com/v21.0/${encodeURIComponent(cfg.metaPhoneNumberId)}/messages`;
+    const payload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "call_permission_request",
+        action: { name: "call_permission_request" },
+        body: {
+          text: (
+            opts.bodyText ||
+            "¿Nos autorizas a llamarte por WhatsApp para asesorarte más rápido sobre tu solicitud?"
+          ).slice(0, 1024),
+        },
+      },
+    };
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${cfg.metaAccessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data?.error?.message || `Meta rechazó la solicitud de permiso (HTTP ${res.status}).`,
+      };
+    }
+    return {
+      ok: true,
+      externalMessageId: data?.messages?.[0]?.id || `wa-callperm-${Date.now()}`,
+      info: "📲 Solicitud de permiso de llamada enviada por WhatsApp. En cuanto el cliente acepte podrás llamarlo.",
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Error enviando permiso de llamada." };
+  }
+}
+
+// 3. Control live WhatsApp WebRTC Call signaling (connect, pre_accept, accept, reject, terminate)
+export async function controlWhatsAppCall(opts: {
+  workspaceId?: string;
+  action: "connect" | "pre_accept" | "accept" | "reject" | "terminate";
+  callId?: string;
+  to?: string;
+  sdp?: string;
+  sdpType?: "offer" | "answer";
+}): Promise<{ ok: boolean; callId?: string; info?: string; error?: string }> {
+  const cfg = await getIntegrationSettings(opts.workspaceId);
+  if (!cfg.metaAccessToken || !cfg.metaPhoneNumberId) {
+    return { ok: false, error: "Conecta primero Meta Cloud API en Conexiones y empresa." };
+  }
+  try {
+    const endpoint = `https://graph.facebook.com/v21.0/${encodeURIComponent(cfg.metaPhoneNumberId)}/calls`;
+    const payload: Record<string, unknown> = {
+      messaging_product: "whatsapp",
+      action: opts.action,
+    };
+    if (opts.action === "connect") {
+      const to = normalizeCRPhone(opts.to || "");
+      if (!to) return { ok: false, error: "Número de destino inválido." };
+      payload.to = to;
+    } else if (opts.callId) {
+      payload.call_id = opts.callId;
+    }
+    if (opts.sdp && opts.sdpType) {
+      payload.session = {
+        sdp_type: opts.sdpType,
+        sdp: opts.sdp,
+      };
+    }
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${cfg.metaAccessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data?.error?.message || `Meta Calling API (${opts.action}) devolvió HTTP ${res.status}.`,
+      };
+    }
+    const returnedCallId = String(data?.calls?.[0]?.id || opts.callId || "");
+    return { ok: true, callId: returnedCallId, info: `Acción VoIP "${opts.action}" ejecutada.` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Error de señalización VoIP." };
+  }
+}

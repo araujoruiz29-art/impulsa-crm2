@@ -80,6 +80,95 @@ export async function POST(req: NextRequest) {
         }
         const wsCfg = wsId === targetWorkspaceId ? cfg : await getIntegrationSettings(wsId);
 
+        // 0. WhatsApp Business Calling API (VoIP WebRTC signaling via Meta Webhook "calls" field)
+        if (change.field === "calls" && Array.isArray(value.calls)) {
+          const callContacts = Array.isArray(value.contacts) ? value.contacts : [];
+          for (const callEv of value.calls) {
+            const externalCallId = String(callEv.id || "").trim();
+            if (!externalCallId) continue;
+            const eventType = String(callEv.event || "").toLowerCase();
+            const directionRaw = String(callEv.direction || "").toUpperCase();
+            const fromPhone = normalizeCRPhone(String(callEv.from || ""));
+            const toPhone = normalizeCRPhone(String(callEv.to || ""));
+            const sdp = String(callEv.session?.sdp || "");
+            const sdpType = String(callEv.session?.sdp_type || "").toLowerCase();
+
+            if (eventType === "connect") {
+              const existingCall = await prisma.whatsAppCall.findFirst({
+                where: { workspaceId: wsId, externalCallId },
+              });
+              if (existingCall && sdpType === "answer" && sdp) {
+                // Outbound call answered by customer -> store remote answer SDP so browser WebRTC completes handshake
+                await prisma.whatsAppCall.update({
+                  where: { id: existingCall.id },
+                  data: { answerSdp: sdp, status: "ACTIVE", answeredAt: new Date() },
+                });
+              } else if (!existingCall) {
+                // Inbound user-initiated call (FREE $0/min!)
+                const matchedCt = callContacts.find(
+                  (ct: { wa_id?: string }) => normalizeCRPhone(ct.wa_id || "") === fromPhone
+                );
+                const callerName =
+                  String(matchedCt?.profile?.name || callContacts[0]?.profile?.name || fromPhone || "Cliente WhatsApp");
+                const linkedClient = fromPhone
+                  ? await findOrCreateWhatsAppClient(wsId, fromPhone, callerName).catch(() => null)
+                  : null;
+                await prisma.whatsAppCall.create({
+                  data: {
+                    workspaceId: wsId,
+                    externalCallId,
+                    direction: directionRaw === "BUSINESS_INITIATED" ? "OUTBOUND" : "INBOUND",
+                    status: "RINGING",
+                    fromPhone,
+                    toPhone,
+                    callerName: linkedClient?.company || callerName,
+                    clientId: linkedClient?.id || null,
+                    offerSdp: sdp,
+                  },
+                });
+              }
+            } else if (eventType === "terminate") {
+              const existingCall = await prisma.whatsAppCall.findFirst({
+                where: { workspaceId: wsId, externalCallId },
+              });
+              if (existingCall) {
+                const dur =
+                  Number(callEv.duration) ||
+                  (existingCall.answeredAt
+                    ? Math.max(1, Math.round((Date.now() - existingCall.answeredAt.getTime()) / 1000))
+                    : 0);
+                const nextStatus =
+                  existingCall.status === "RINGING" && dur === 0
+                    ? "MISSED"
+                    : existingCall.status === "REJECTED"
+                    ? "REJECTED"
+                    : "ENDED";
+                await prisma.whatsAppCall.update({
+                  where: { id: existingCall.id },
+                  data: { status: nextStatus, durationSeconds: dur, endedAt: new Date() },
+                });
+                if (existingCall.clientId) {
+                  await prisma.activity
+                    .create({
+                      data: {
+                        workspaceId: wsId,
+                        clientId: existingCall.clientId,
+                        type: "LLAMADA",
+                        title:
+                          nextStatus === "MISSED"
+                            ? `📵 Llamada perdida de WhatsApp (${existingCall.callerName})`
+                            : `📞 Llamada VoIP WhatsApp (${existingCall.direction === "INBOUND" ? "Entrante" : "Saliente"} · ${dur}s)`,
+                        description: `Teléfono: ${existingCall.fromPhone || existingCall.toPhone}`,
+                        completed: true,
+                      },
+                    })
+                    .catch(() => {});
+                }
+              }
+            }
+          }
+        }
+
         // A. WhatsApp inbound messages
         if (change.field === "messages" && Array.isArray(value.messages)) {
           const contacts = Array.isArray(value.contacts) ? value.contacts : [];

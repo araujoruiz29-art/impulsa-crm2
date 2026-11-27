@@ -748,6 +748,18 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         purpose:
           "Envía cada lunes un resumen gerencial al dueño (ventas ganadas, abonos, saldo pendiente, citas y SLA) y registra una bitácora inmutable de cambios clave realizados por usuarios.",
       },
+      {
+        control: "📞 VoIP Oficial WhatsApp (WebRTC · Llamadas Entrantes Gratis $0/min)",
+        location: "Bandeja («📞 Llamar WA» / «📲 Permiso Llamada») + Pestaña Vanguardia",
+        purpose:
+          "Activa en 1 clic el ícono de llamada oficial en tu número de WhatsApp Business (suscribiendo el campo «calls» en Meta Webhooks). Cuando un cliente llama, suena un Softphone WebRTC en vivo en tu navegador con opción de grabar y transcribir/resumir la llamada automáticamente con Gemini.",
+      },
+      {
+        control: "🛰️ Radar de Vanguardia IA (Actualización Continua desde la Red)",
+        location: "Conexiones y empresa → Pestaña Vanguardia",
+        purpose:
+          "Escanea internet con Google Search + Gemini (manualmente o cada lunes en automático) buscando novedades en WhatsApp/Meta API, CRM líderes, Ads y Hacienda CR 4.4, filtrando lo que ya tienes y guardando solo mejoras nuevas priorizadas en tu base de datos.",
+      },
     ],
   },
 ];

@@ -2,6 +2,7 @@ import { getCompanySettings, getIntegrationSettings, prisma } from "./prisma";
 import { sendCorporateEmail } from "./email";
 import { formatMoney } from "./format";
 import { computeWorkspaceSlaStats } from "./round-robin";
+import { runInnovationRadarScan } from "./innovation-radar";
 
 export async function sendWeeklyExecutiveReport(opts: {
   workspaceId: string;
@@ -51,6 +52,23 @@ export async function sendWeeklyExecutiveReport(opts: {
     bySource[c.source || "OTRO"] = (bySource[c.source || "OTRO"] || 0) + 1;
   }
 
+  // Refresh Innovation Radar once a week on default/main workspace so owner gets fresh web trends
+  if (workspaceId === "default") {
+    await runInnovationRadarScan(workspaceId).catch(() => {});
+  }
+  const topRadar = await prisma.innovationRadarItem.findMany({
+    where: { workspaceId, status: { in: ["NUEVA", "APROBADA"] } },
+    orderBy: { discoveredAt: "desc" },
+    take: 3,
+    select: { title: true, category: true, impact: true, summary: true },
+  });
+  const radarRows = topRadar
+    .map(
+      (r) =>
+        `<li><strong>[${r.category} · Impacto ${r.impact}] ${r.title}:</strong> ${r.summary}</li>`
+    )
+    .join("");
+
   const sourceRows = Object.entries(bySource)
     .map(([src, cnt]) => `<li><strong>${src}:</strong> ${cnt} leads</li>`)
     .join("");
@@ -85,6 +103,11 @@ export async function sendWeeklyExecutiveReport(opts: {
           }</li>
         </ul>
         ${sourceRows ? `<p><strong>Leads por canal:</strong></p><ul>${sourceRows}</ul>` : ""}
+        ${
+          radarRows
+            ? `<div style="margin-top:16px;padding:12px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;"><div style="font-weight:800;color:#4c1d95;margin-bottom:6px;">🛰️ Radar de Vanguardia IA (Mejoras nuevas detectadas en la red)</div><ul style="padding-left:18px;margin:0;">${radarRows}</ul></div>`
+            : ""
+        }
         <p style="font-size:12px;color:#64748b;margin-top:20px;">Enviado automáticamente por impulsa CRM.</p>
       </div>
     </div>

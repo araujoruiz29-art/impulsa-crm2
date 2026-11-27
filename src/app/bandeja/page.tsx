@@ -1486,6 +1486,51 @@ export default function BandejaPage() {
                         >
                           🎙️ Audio IA
                         </button>
+                        <button
+                          type="button"
+                          disabled={sending}
+                          onClick={async () => {
+                            if (!activeConv) return;
+                            setSending(true);
+                            try {
+                              const res = await fetch("/api/voip/whatsapp", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  action: "request_permission",
+                                  to: activeConv.externalId,
+                                }),
+                              });
+                              const d = await res.json();
+                              setStatusBanner(d.ok ? d.info || "📲 Permiso de llamada enviado." : `❌ ${d.error}`);
+                            } finally {
+                              setSending(false);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-3 py-1.5 rounded-xl"
+                          title="Envía la tarjeta oficial de Meta para que el cliente te autorice a llamarlo por WhatsApp"
+                        >
+                          📲 Permiso Llamada
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!activeConv) return;
+                            window.dispatchEvent(
+                              new CustomEvent("impulsa:start-wa-call", {
+                                detail: {
+                                  to: activeConv.externalId,
+                                  callerName: activeConv.client?.company || activeConv.subject || activeConv.externalId,
+                                  clientId: activeConv.client?.id,
+                                },
+                              })
+                            );
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-xl shadow-2xs"
+                          title="Inicia una llamada VoIP directa por WhatsApp desde tu navegador (WebRTC)"
+                        >
+                          📞 Llamar WA
+                        </button>
                       </>
                     )}
                   </div>

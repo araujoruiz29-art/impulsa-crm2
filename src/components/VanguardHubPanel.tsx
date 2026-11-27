@@ -16,7 +16,33 @@ import {
   Mic,
   Users,
   Send,
+  PhoneCall,
+  Radar,
 } from "lucide-react";
+
+interface CallHistoryRow {
+  id: string;
+  direction: string;
+  status: string;
+  fromPhone: string;
+  toPhone: string;
+  callerName: string;
+  durationSeconds: number;
+  aiSummary: string;
+  createdAt: string;
+}
+
+interface RadarRow {
+  id: string;
+  category: string;
+  title: string;
+  summary: string;
+  sourceUrl: string;
+  impact: string;
+  effort: string;
+  status: string;
+  discoveredAt: string;
+}
 
 interface VanguardHubPanelProps {
   workspaceId: string;
@@ -63,6 +89,8 @@ export function VanguardHubPanel({
   const [logs, setLogs] = useState<AuditRow[]>([]);
   const [sla, setSla] = useState<SlaData | null>(null);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [waCalls, setWaCalls] = useState<CallHistoryRow[]>([]);
+  const [radarItems, setRadarItems] = useState<RadarRow[]>([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [busyAction, setBusyAction] = useState("");
 
@@ -74,15 +102,65 @@ export function VanguardHubPanel({
   const loadAudit = async () => {
     setLoadingAudit(true);
     try {
-      const res = await fetch("/api/audit");
-      const d = await res.json();
-      if (res.ok) {
+      const [auditRes, voipRes, radarRes] = await Promise.all([
+        fetch("/api/audit"),
+        fetch("/api/voip/whatsapp"),
+        fetch("/api/radar"),
+      ]);
+      if (auditRes.ok) {
+        const d = await auditRes.json();
         setLogs(d.logs || []);
         setSla(d.sla || null);
         setBookings(d.bookings || []);
       }
+      if (voipRes.ok) {
+        const v = await voipRes.json();
+        setWaCalls(v.calls || []);
+      }
+      if (radarRes.ok) {
+        const r = await radarRes.json();
+        setRadarItems(r.items || []);
+      }
     } finally {
       setLoadingAudit(false);
+    }
+  };
+
+  const toggleWhatsAppCalling = async (enable: boolean) => {
+    setBusyAction(enable ? "voip_on" : "voip_off");
+    try {
+      const res = await fetch("/api/voip/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: enable ? "enable_calling" : "disable_calling" }),
+      });
+      const d = await res.json();
+      onStatus(d.ok ? d.info || "✅ Estado VoIP actualizado." : `❌ ${d.error || "Error configurando VoIP."}`);
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const scanRadarNow = async () => {
+    setBusyAction("radar_scan");
+    try {
+      const res = await fetch("/api/radar", { method: "POST" });
+      const d = await res.json();
+      onStatus(d.ok ? d.message || "🛰️ Radar actualizado." : `❌ ${d.error || "Error escaneando la web."}`);
+      if (d.ok) loadAudit();
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const updateRadarStatus = async (id: string, status: string) => {
+    const res = await fetch("/api/radar", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+    if (res.ok) {
+      setRadarItems((prev) => prev.map((it) => (it.id === id ? { ...it, status } : it)));
     }
   };
 
@@ -479,6 +557,139 @@ export function VanguardHubPanel({
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* 6. VoIP Oficial WhatsApp Business Calling API (WebRTC · $0 entrantes) */}
+      <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span className="font-extrabold text-emerald-950 flex items-center gap-1.5 text-sm">
+              <PhoneCall className="w-4 h-4 text-emerald-600" /> VoIP Oficial WhatsApp (WebRTC · Llamadas Entrantes $0/min)
+            </span>
+            <p className="text-slate-600 mt-0.5">
+              Recibe y realiza llamadas de voz por WhatsApp directo en el navegador, con grabación y resumen IA automático. En Meta Developers → WhatsApp → Webhooks recuerda suscribir el campo <code>calls</code>.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={busyAction === "voip_on"}
+              onClick={() => toggleWhatsAppCalling(true)}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              {busyAction === "voip_on" ? "Activando..." : "📞 Activar Llamadas WA"}
+            </button>
+            <button
+              type="button"
+              disabled={busyAction === "voip_off"}
+              onClick={() => toggleWhatsAppCalling(false)}
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold"
+            >
+              Desactivar
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-emerald-200 overflow-hidden">
+          <div className="px-3 py-2 bg-emerald-100/60 border-b border-emerald-200 font-bold text-emerald-950">
+            Historial reciente de llamadas VoIP ({waCalls.length})
+          </div>
+          <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+            {waCalls.map((c) => (
+              <div key={c.id} className="px-3 py-2 space-y-0.5 text-[11px]">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <span className="font-bold text-slate-900">
+                    {c.direction === "INBOUND" ? "📥 Entrante" : "📤 Saliente"} · {c.callerName} ({c.fromPhone || c.toPhone})
+                  </span>
+                  <span className="text-slate-500">
+                    {c.status} · {c.durationSeconds}s · {new Date(c.createdAt).toLocaleString("es-CR")}
+                  </span>
+                </div>
+                {c.aiSummary && <p className="text-emerald-800">🧠 {c.aiSummary}</p>}
+              </div>
+            ))}
+            {waCalls.length === 0 && (
+              <div className="p-4 text-center text-slate-400">
+                Aún no hay llamadas registradas. Activa Llamadas WA arriba o usa «📞 Llamar WA» en tu Bandeja.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 7. Radar de Vanguardia IA (Base de datos viva de mejoras nuevas desde la red) */}
+      <div className="p-4 rounded-2xl bg-violet-50/60 border border-violet-200 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span className="font-extrabold text-violet-950 flex items-center gap-1.5 text-sm">
+              <Radar className="w-4 h-4 text-violet-600" /> Radar de Vanguardia IA · Base de Mejoras Continua (Google Search + IA)
+            </span>
+            <p className="text-slate-600 mt-0.5">
+              Vigila novedades reales en internet (WhatsApp/Meta API, Kommo/HubSpot/Odoo, IA de ventas y CR Hacienda 4.4), filtra lo que ya tienes y guarda solo oportunidades nuevas (también se actualiza sola cada lunes).
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={busyAction === "radar_scan"}
+            onClick={scanRadarNow}
+            className="px-3.5 py-2 rounded-xl bg-violet-700 hover:bg-violet-800 text-white font-bold"
+          >
+            {busyAction === "radar_scan" ? "Escaneando la red..." : "🛰️ Escanear Internet Ahora"}
+          </button>
+        </div>
+
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {radarItems.map((it) => (
+            <div key={it.id} className="p-3 rounded-xl bg-white border border-violet-200 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full bg-violet-100 text-violet-900 font-extrabold text-[10px]">
+                    {it.category}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] ${
+                      it.impact === "ALTO"
+                        ? "bg-emerald-100 text-emerald-900"
+                        : "bg-amber-100 text-amber-900"
+                    }`}
+                  >
+                    Impacto {it.impact}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
+                    Esfuerzo {it.effort}
+                  </span>
+                  <strong className="text-slate-900 text-xs">{it.title}</strong>
+                </div>
+                <select
+                  value={it.status}
+                  onChange={(e) => updateRadarStatus(it.id, e.target.value)}
+                  className="px-2 py-1 rounded-lg border border-slate-200 text-[11px] font-bold bg-slate-50"
+                >
+                  <option value="NUEVA">🆕 Nueva</option>
+                  <option value="APROBADA">✅ Aprobada</option>
+                  <option value="IMPLEMENTADA">🚀 Implementada</option>
+                  <option value="DESCARTADA">✕ Descartada</option>
+                </select>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">{it.summary}</p>
+              {it.sourceUrl && (
+                <a
+                  href={it.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-700 hover:underline"
+                >
+                  <ExternalLink className="w-3 h-3" /> Ver fuente
+                </a>
+              )}
+            </div>
+          ))}
+          {radarItems.length === 0 && (
+            <div className="p-4 rounded-xl bg-white border border-dashed border-violet-200 text-center text-slate-400">
+              Pulsa «🛰️ Escanear Internet Ahora» para llenar tu base de datos de innovaciones con las tendencias más recientes de la red.
+            </div>
+          )}
         </div>
       </div>
     </div>
