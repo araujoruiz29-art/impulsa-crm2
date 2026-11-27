@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentSession } from "@/lib/workspace";
+import { requireSuperAdmin } from "@/lib/workspace";
 import { hashPassword } from "@/lib/password";
 
-// SuperAdmin-only SaaS companies control panel API
+// SuperAdmin-only SaaS companies control panel API (fail-closed)
 export async function GET() {
-  const session = await getCurrentSession();
-  if (session && session.role !== "SUPERADMIN") {
-    return NextResponse.json({ error: "Solo el SuperAdmin puede gestionar compañías." }, { status: 403 });
+  const guard = await requireSuperAdmin();
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
   const companies = await prisma.companySettings.findMany({
@@ -74,9 +74,9 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await getCurrentSession();
-    if (session && session.role !== "SUPERADMIN") {
-      return NextResponse.json({ error: "Solo el SuperAdmin puede modificar compañías." }, { status: 403 });
+    const guard = await requireSuperAdmin();
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: guard.status });
     }
 
     const body = await req.json();

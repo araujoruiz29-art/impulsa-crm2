@@ -1,11 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getActiveWorkspaceId } from "@/lib/workspace";
+import { getActiveWorkspaceId, requireOwnerOrAdmin } from "@/lib/workspace";
 
 export async function POST(req: NextRequest) {
   try {
     const workspaceId = await getActiveWorkspaceId();
     const body = await req.json();
+
+    // Bulk destructive wipes require OWNER or SUPERADMIN (block AGENT role)
+    const isBulkWipe = Boolean(
+      body.clearNonEmailConversations ||
+        body.clearProducts ||
+        body.clearAlerts ||
+        body.clearDemoBoard ||
+        body.clearKanbanClients
+    );
+    if (isBulkWipe) {
+      const guard = await requireOwnerOrAdmin();
+      if (!guard.ok) {
+        return NextResponse.json({ error: guard.error }, { status: guard.status });
+      }
+    }
 
     const deleted = {
       conversations: 0,

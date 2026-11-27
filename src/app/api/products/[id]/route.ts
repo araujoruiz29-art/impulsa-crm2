@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceId } from "@/lib/workspace";
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const workspaceId = await getActiveWorkspaceId();
   const { id } = await context.params;
   const body = await req.json();
+
+  const existing = await prisma.product.findFirst({ where: { id, workspaceId }, select: { id: true } });
+  if (!existing) {
+    return NextResponse.json({ error: "Producto no encontrado." }, { status: 404 });
+  }
 
   const product = await prisma.product.update({
     where: { id },
@@ -27,7 +34,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const workspaceId = await getActiveWorkspaceId();
   const { id } = await context.params;
-  await prisma.product.delete({ where: { id } });
+  const deleted = await prisma.product.deleteMany({ where: { id, workspaceId } });
+  if (deleted.count === 0) {
+    return NextResponse.json({ error: "Producto no encontrado." }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }

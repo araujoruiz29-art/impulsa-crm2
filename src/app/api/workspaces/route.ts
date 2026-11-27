@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getActiveWorkspaceId, getCurrentSession, WORKSPACE_COOKIE } from "@/lib/workspace";
+import { getActiveWorkspaceId, getCurrentSession, requireOwnerOrAdmin, WORKSPACE_COOKIE } from "@/lib/workspace";
 
 export async function GET() {
   const session = await getCurrentSession();
+  if (!session && process.env.CRM_DISABLE_AUTH !== "true") {
+    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  }
   const activeId = await getActiveWorkspaceId();
 
-  // Strict multi-tenant isolation: AGENT sees only assigned company; OWNER sees only owned companies; SUPERADMIN sees all
+  // Strict multi-tenant isolation: AGENT sees only assigned active company; OWNER sees only owned active companies; SUPERADMIN sees all
   const companies = await prisma.companySettings.findMany({
     where:
       session && session.role === "AGENT"
-        ? { id: activeId }
+        ? { id: activeId, active: true }
         : session && session.role !== "SUPERADMIN"
-        ? { ownerUserId: session.userId }
+        ? { ownerUserId: session.userId, active: true }
         : undefined,
     orderBy: { createdAt: "asc" },
   });
@@ -54,14 +57,12 @@ export async function GET() {
 // Create a brand new company workspace owned by the logged-in user
 export async function POST(req: NextRequest) {
   try {
-    const session = await getCurrentSession();
-    if (session?.role === "AGENT") {
-      return NextResponse.json(
-        { error: "Solo el dueño o administrador puede crear nuevas empresas." },
-        { status: 403 }
-      );
+    const guard = await requireOwnerOrAdmin();
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: guard.status });
     }
-    const ownerUserId = session?.role === "SUPERADMIN" || !session ? "superadmin" : session.userId;
+    const session = guard.session;
+    const ownerUserId = session.role === "SUPERADMIN" ? "superadmin" : session.userId;
 
     const body = await req.json();
     const brandName = String(body.brandName || "").trim();
@@ -153,16 +154,22 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Switch active workspace (strictly verified for ownership)
+// Switch active workspace (strictly verified for ownership & active status)
 export async function PATCH(req: NextRequest) {
   const session = await getCurrentSession();
+  if (!session && process.env.CRM_DISABLE_AUTH !== "true") {
+    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  }
   const body = await req.json();
   const workspaceId = String(body.workspaceId || "default");
   const exists = await prisma.companySettings.findUnique({ where: { id: workspaceId } });
   if (!exists) {
     return NextResponse.json({ error: "Empresa no encontrada." }, { status: 404 });
   }
-  if (session && session.role !== "SUPERADMIN" && exists.ownerUserId !== session.userId) {
+  if (session && session.role === "AGENT") {
+    return NextResponse.json({ error: "Los vendedores no pueden cambiar de empresa." }, { status: 403 });
+  }
+  if (session && session.role !== "SUPERADMIN" && (exists.ownerUserId !== session.userId || !exists.active)) {
     return NextResponse.json({ error: "No tienes acceso a esta empresa." }, { status: 403 });
   }
   const res = NextResponse.json({ ok: true, activeWorkspaceId: workspaceId });

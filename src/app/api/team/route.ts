@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getActiveWorkspaceId, getCurrentSession } from "@/lib/workspace";
+import { getActiveWorkspaceId, getCurrentSession, requireOwnerOrAdmin } from "@/lib/workspace";
 import { hashPassword } from "@/lib/password";
 import { getAuthConfig } from "@/lib/auth";
 
@@ -37,7 +37,10 @@ export async function GET() {
   return NextResponse.json({
     workspaceId,
     brandName: company?.brandName || "",
-    canManage: !session || session.role === "SUPERADMIN" || session.role === "OWNER",
+    canManage: Boolean(
+      process.env.CRM_DISABLE_AUTH === "true" ||
+        (session && (session.role === "SUPERADMIN" || session.role === "OWNER"))
+    ),
     owner,
     members,
   });
@@ -45,15 +48,12 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getCurrentSession();
-    if (session && session.role === "AGENT") {
-      return NextResponse.json(
-        { error: "Solo el dueño de la empresa o el administrador puede agregar vendedores." },
-        { status: 403 }
-      );
+    const guard = await requireOwnerOrAdmin();
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: guard.status });
     }
 
-    const workspaceId = await getActiveWorkspaceId();
+    const workspaceId = guard.workspaceId;
     const body = await req.json();
     const name = String(body.name || "").trim();
     const email = String(body.email || "").trim().toLowerCase();
@@ -113,11 +113,11 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await getCurrentSession();
-    if (session && session.role === "AGENT") {
-      return NextResponse.json({ error: "Sin permisos para modificar usuarios." }, { status: 403 });
+    const guard = await requireOwnerOrAdmin();
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: guard.status });
     }
-    const workspaceId = await getActiveWorkspaceId();
+    const workspaceId = guard.workspaceId;
     const body = await req.json();
     const id = String(body.id || "");
     if (!id) {
@@ -153,11 +153,11 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const session = await getCurrentSession();
-    if (session && session.role === "AGENT") {
-      return NextResponse.json({ error: "Sin permisos para eliminar usuarios." }, { status: 403 });
+    const guard = await requireOwnerOrAdmin();
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: guard.status });
     }
-    const workspaceId = await getActiveWorkspaceId();
+    const workspaceId = guard.workspaceId;
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id") || "";
     if (!id) {

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateQuoteTotals } from "@/lib/format";
+import { getActiveWorkspaceId } from "@/lib/workspace";
 
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const workspaceId = await getActiveWorkspaceId();
   const { id } = await context.params;
-  const quote = await prisma.quote.findUnique({
-    where: { id },
+  const quote = await prisma.quote.findFirst({
+    where: { id, workspaceId },
     include: { items: { orderBy: { sortOrder: "asc" } }, client: true },
   });
   if (!quote) {
@@ -16,10 +18,11 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const workspaceId = await getActiveWorkspaceId();
     const { id } = await context.params;
     const body = await req.json();
-    const existing = await prisma.quote.findUnique({
-      where: { id },
+    const existing = await prisma.quote.findFirst({
+      where: { id, workspaceId },
       include: { items: true },
     });
     if (!existing) {
@@ -90,8 +93,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     });
 
     if (body.status === "APROBADA" && quote.clientId) {
-      await prisma.client.update({
-        where: { id: quote.clientId },
+      await prisma.client.updateMany({
+        where: { id: quote.clientId, workspaceId },
         data: { stage: "GANADO", estimatedValue: quote.total },
       });
     }
@@ -104,7 +107,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const workspaceId = await getActiveWorkspaceId();
   const { id } = await context.params;
-  await prisma.quote.delete({ where: { id } });
+  const deleted = await prisma.quote.deleteMany({ where: { id, workspaceId } });
+  if (deleted.count === 0) {
+    return NextResponse.json({ error: "Proforma no encontrada." }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }

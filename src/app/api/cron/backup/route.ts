@@ -2,22 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { emailBackupSnapshot } from "@/lib/backup-service";
 import { getCurrentSession } from "@/lib/workspace";
+import { timingSafeEqualStr } from "@/lib/security";
 
 // Automated weekly backup cron endpoint (triggered by Vercel Cron every Sunday 08:00 UTC / 02:00 AM CR)
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization") || "";
-    const cronSecret = process.env.CRON_SECRET || "";
-    const isVercelCronHeader = req.headers.get("x-vercel-cron") === "1";
+    const cronSecret = (process.env.CRON_SECRET || "").trim();
     const session = await getCurrentSession();
     const isSuperAdmin = session?.role === "SUPERADMIN";
 
-    const authorized =
-      isSuperAdmin ||
-      (cronSecret ? authHeader === `Bearer ${cronSecret}` : isVercelCronHeader);
+    const hasValidCronSecret =
+      Boolean(cronSecret) && timingSafeEqualStr(authHeader, `Bearer ${cronSecret}`);
+
+    const authorized = isSuperAdmin || hasValidCronSecret;
 
     if (!authorized) {
-      return NextResponse.json({ error: "No autorizado para ejecutar respaldo programado." }, { status: 401 });
+      return NextResponse.json(
+        {
+          error: cronSecret
+            ? "No autorizado para ejecutar respaldo programado."
+            : "CRON_SECRET no está configurado en las variables de entorno del servidor.",
+        },
+        { status: 401 }
+      );
     }
 
     const results: Array<{ workspaceId: string; ok: boolean; detail: string }> = [];

@@ -105,11 +105,12 @@ export function verifyMetaWebhookSignature(
   signatureHeader: string | null,
   appSecret: string
 ): boolean {
-  if (!appSecret) return true; // Skip check if App Secret not configured yet
+  const effectiveSecret = (appSecret || process.env.META_APP_SECRET || "").trim();
+  if (!effectiveSecret) return true; // Skip only if App Secret is not configured in workspace or env
   if (!signatureHeader || !signatureHeader.startsWith("sha256=")) return false;
   const expected =
     "sha256=" +
-    crypto.createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
+    crypto.createHmac("sha256", effectiveSecret).update(rawBody, "utf8").digest("hex");
   try {
     return crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
   } catch {

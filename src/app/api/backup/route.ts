@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getActiveWorkspaceId, getCurrentSession } from "@/lib/workspace";
+import { requireOwnerOrAdmin } from "@/lib/workspace";
 import {
   buildBackupPayload,
   emailBackupSnapshot,
   restoreBackupPayload,
 } from "@/lib/backup-service";
 
-// GET: Download backup JSON (?full=1 is restricted to SUPERADMIN; OWNER exports only their own workspace)
+// GET: Download backup JSON (?full=1 is strictly SUPERADMIN; OWNER exports only own workspace; AGENT blocked)
 export async function GET(req: NextRequest) {
-  const session = await getCurrentSession();
-  const isSuperAdmin = !session || session.role === "SUPERADMIN";
+  const guard = await requireOwnerOrAdmin();
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
+  const isSuperAdmin = guard.session.role === "SUPERADMIN";
   const { searchParams } = new URL(req.url);
   const fullMigration = searchParams.get("full") === "1" && isSuperAdmin;
-  const workspaceId = await getActiveWorkspaceId();
+  const workspaceId = guard.workspaceId;
 
   const { payload } = await buildBackupPayload({ workspaceId, fullMigration });
 
@@ -23,19 +26,22 @@ export async function GET(req: NextRequest) {
       "Content-Disposition": `attachment; filename="respaldo-${
         fullMigration ? "migracion-completa" : workspaceId
       }-${new Date().toISOString().slice(0, 10)}.json"`,
+      "Cache-Control": "no-store",
     },
   });
 }
 
-// POST: Restore backup JSON OR send instant email backup snapshot
+// POST: Restore backup JSON OR send instant email backup snapshot (OWNER / SUPERADMIN only)
 export async function POST(req: NextRequest) {
   try {
-    const session = await getCurrentSession();
-    const isSuperAdmin = !session || session.role === "SUPERADMIN";
-    const activeWorkspaceId = await getActiveWorkspaceId();
+    const guard = await requireOwnerOrAdmin();
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: guard.status });
+    }
+    const isSuperAdmin = guard.session.role === "SUPERADMIN";
+    const activeWorkspaceId = guard.workspaceId;
     const data = await req.json();
 
-    // Instant email backup trigger from UI
     if (data?.action === "email_now") {
       const fullMigration = Boolean(data.full) && isSuperAdmin;
       const result = await emailBackupSnapshot({
@@ -46,7 +52,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result, { status: result.ok ? 200 : 400 });
     }
 
-    // Reject cross-workspace restore attempts by non-superadmin
     if (!isSuperAdmin && data?.fullMigration) {
       return NextResponse.json(
         { error: "Solo el administrador principal puede restaurar migraciones multiempresa completas." },

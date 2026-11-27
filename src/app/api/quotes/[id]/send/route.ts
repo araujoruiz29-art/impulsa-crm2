@@ -5,25 +5,29 @@ import { formatMoney, normalizeCRPhone, sanitizeFilename } from "@/lib/format";
 import { sendCorporateEmail } from "@/lib/email";
 import { buildWhatsAppDesktopLinks, sendWhatsAppCloudMessage } from "@/lib/meta";
 import { runTriggerAutomations } from "@/lib/automations";
+import { getActiveWorkspaceId } from "@/lib/workspace";
+import { signQuotePdfToken } from "@/lib/security";
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const workspaceId = await getActiveWorkspaceId();
     const { id } = await context.params;
     const body = await req.json();
     const channel: "EMAIL" | "WHATSAPP" | "BOTH" = body.channel || "EMAIL";
 
-    const quote = await prisma.quote.findUnique({
-      where: { id },
+    const quote = await prisma.quote.findFirst({
+      where: { id, workspaceId },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     });
     if (!quote) {
       return NextResponse.json({ error: "Proforma no encontrada." }, { status: 404 });
     }
 
-    const company = await getCompanySettings();
-    const integrations = await getIntegrationSettings();
+    const company = await getCompanySettings(workspaceId);
+    const integrations = await getIntegrationSettings(workspaceId);
     const filename = `${quote.number}-${sanitizeFilename(quote.clientCompany)}.pdf`;
     const pdfBytes = await generateProformaPdf(quote);
+    const signedPdfPath = `/api/quotes/${quote.id}/pdf?sig=${signQuotePdfToken(quote.id)}`;
 
     const defaultMessage =
       body.message ||
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         subject,
         text: defaultMessage,
         fromAccountId: body.fromAccountId ? String(body.fromAccountId) : undefined,
-        workspaceId: quote.workspaceId,
+        workspaceId,
         attachments: [
           {
             filename,
@@ -58,13 +62,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       results.email = emailRes;
       if (!sentChannels.includes("CORREO")) sentChannels.push("CORREO");
 
-      // Log into Omnichannel Conversation
       let conv = await prisma.conversation.findFirst({
-        where: { channel: "EMAIL", externalId: targetEmail },
+        where: { workspaceId, channel: "EMAIL", externalId: targetEmail },
       });
       if (!conv) {
         conv = await prisma.conversation.create({
           data: {
+            workspaceId,
             channel: "EMAIL",
             externalId: targetEmail,
             subject,
@@ -83,7 +87,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           body: defaultMessage,
           externalMessageId: emailRes.messageId || "",
           attachmentName: filename,
-          attachmentUrl: `/api/quotes/${quote.id}/pdf`,
+          attachmentUrl: signedPdfPath,
           status: emailRes.simulated ? "SIMULATED" : "SENT",
         },
       });
@@ -103,9 +107,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       const publicBase = integrations.metaPublicWebhookUrl
         ? integrations.metaPublicWebhookUrl.replace(/\/api\/webhooks\/meta.*$/, "")
         : "";
-      const documentUrl = publicBase ? `${publicBase}/api/quotes/${quote.id}/pdf` : undefined;
+      const documentUrl = publicBase ? `${publicBase}${signedPdfPath}` : undefined;
 
       const waRes = await sendWhatsAppCloudMessage({
+        workspaceId,
         to: targetPhone,
         text: defaultMessage,
         documentUrl,
@@ -116,11 +121,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       if (!sentChannels.includes("WHATSAPP")) sentChannels.push("WHATSAPP");
 
       let conv = await prisma.conversation.findFirst({
-        where: { channel: "WHATSAPP", externalId: targetPhone },
+        where: { workspaceId, channel: "WHATSAPP", externalId: targetPhone },
       });
       if (!conv) {
         conv = await prisma.conversation.create({
           data: {
+            workspaceId,
             channel: "WHATSAPP",
             externalId: targetPhone,
             subject: quote.clientCompany,
@@ -138,7 +144,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           body: defaultMessage,
           externalMessageId: waRes.externalMessageId || "",
           attachmentName: filename,
-          attachmentUrl: `/api/quotes/${quote.id}/pdf`,
+          attachmentUrl: signedPdfPath,
           status: waRes.simulated ? "SIMULATED" : waRes.ok ? "SENT" : "FAILED",
         },
       });
@@ -148,7 +154,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       });
     }
 
-    // Update quote status & sent timestamps
     await prisma.quote.update({
       where: { id: quote.id },
       data: {
@@ -161,6 +166,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (quote.clientId) {
       await prisma.activity.create({
         data: {
+          workspaceId,
           clientId: quote.clientId,
           quoteId: quote.id,
           type: channel === "WHATSAPP" ? "WHATSAPP" : "CORREO",
@@ -170,6 +176,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
         },
       });
       await runTriggerAutomations("QUOTE_SENT", {
+        workspaceId,
         clientId: quote.clientId,
         quoteId: quote.id,
         channel,

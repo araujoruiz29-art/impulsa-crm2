@@ -3,12 +3,28 @@ import { createSessionToken, getAuthConfig, SESSION_COOKIE, SessionRole } from "
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { WORKSPACE_COOKIE } from "@/lib/workspace";
+import { checkRateLimit, getClientIp, timingSafeEqualStr } from "@/lib/security";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
+    const ip = getClientIp(req);
+
+    // Rate-limit brute force attempts: max 10 login attempts per 15 min per IP + email
+    const rl = checkRateLimit(`login:${ip}:${email}`, 10, 15 * 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: `Demasiados intentos de inicio de sesión. Intenta nuevamente en ${Math.ceil(
+            rl.retryAfterSec / 60
+          )} minutos.`,
+        },
+        { status: 429 }
+      );
+    }
+
     const cfg = getAuthConfig();
 
     const isProd =
@@ -16,8 +32,8 @@ export async function POST(req: NextRequest) {
       !req.url.includes("localhost") &&
       !req.url.includes("127.0.0.1");
 
-    // 1. Check SuperAdmin credentials (configured via Vercel env vars)
-    if (email === cfg.adminEmail && password === cfg.adminPassword) {
+    // 1. Check SuperAdmin credentials (constant-time compare)
+    if (timingSafeEqualStr(email, cfg.adminEmail) && timingSafeEqualStr(password, cfg.adminPassword)) {
       const token = await createSessionToken(email, "superadmin", "SUPERADMIN");
       const res = NextResponse.json({ ok: true, email, role: "SUPERADMIN" });
       res.cookies.set(SESSION_COOKIE, token, {
@@ -29,6 +45,8 @@ export async function POST(req: NextRequest) {
       });
       res.cookies.set(WORKSPACE_COOKIE, "default", {
         httpOnly: false,
+        sameSite: "lax",
+        secure: isProd,
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
       });

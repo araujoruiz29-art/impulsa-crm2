@@ -21,9 +21,16 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const workspaceId = await getActiveWorkspaceId();
   const body = await req.json();
   const id = String(body.id || "");
   if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
+
+  const existing = await prisma.activity.findFirst({ where: { id, workspaceId }, select: { id: true } });
+  if (!existing) {
+    return NextResponse.json({ error: "Actividad no encontrada." }, { status: 404 });
+  }
+
   const activity = await prisma.activity.update({
     where: { id },
     data: { completed: Boolean(body.completed) },

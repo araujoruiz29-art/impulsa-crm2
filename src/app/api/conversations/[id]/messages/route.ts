@@ -3,10 +3,18 @@ import { getCompanySettings, prisma } from "@/lib/prisma";
 import { sendMetaSocialMessage, sendWhatsAppCloudMessage } from "@/lib/meta";
 import { sendCorporateEmail } from "@/lib/email";
 import { syncCrmFromConversation } from "@/lib/crm-autopilot";
+import { getActiveWorkspaceId } from "@/lib/workspace";
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const workspaceId = await getActiveWorkspaceId();
   const { id } = await context.params;
   const body = await req.json();
+
+  const existing = await prisma.conversation.findFirst({ where: { id, workspaceId }, select: { id: true } });
+  if (!existing) {
+    return NextResponse.json({ error: "Conversación no encontrada." }, { status: 404 });
+  }
+
   const conv = await prisma.conversation.update({
     where: { id },
     data: {
@@ -20,6 +28,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const workspaceId = await getActiveWorkspaceId();
     const { id } = await context.params;
     const body = await req.json();
     const text = String(body.body || "").trim();
@@ -27,8 +36,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "El mensaje no puede estar vacío." }, { status: 400 });
     }
 
-    const conv = await prisma.conversation.findUnique({
-      where: { id },
+    const conv = await prisma.conversation.findFirst({
+      where: { id, workspaceId },
       include: { client: true },
     });
     if (!conv) {
@@ -62,7 +71,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     } else if (conv.channel === "EMAIL") {
       const mail = await sendCorporateEmail({
         to: conv.externalId,
-        subject: body.subject || `Re: ${conv.subject || "Consulta Caminante Corporativo"}`,
+        subject: body.subject || `Re: ${conv.subject || `Consulta ${company.brandName}`}`,
         text,
         fromEmail: conv.accountEmail || undefined,
         workspaceId: conv.workspaceId,
@@ -76,7 +85,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       data: {
         conversationId: conv.id,
         direction: "OUTBOUND",
-        senderName: body.senderRole === "AI" ? "Agente IA Caminante" : company.defaultSeller,
+        senderName: body.senderRole === "AI" ? `Agente IA ${company.brandName}` : company.defaultSeller,
         senderRole: body.senderRole || "AGENT",
         subject: body.subject || "",
         body: text,
@@ -94,7 +103,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       },
     });
 
-    // Silent CRM Autopilot: reads manual seller reply and updates Kanban/tags/Agenda automatically
     const autopilot = await syncCrmFromConversation(conv.id, conv.workspaceId).catch(() => null);
 
     return NextResponse.json({ message: msg, deliveryInfo, autopilot }, { status: 201 });

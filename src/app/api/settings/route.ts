@@ -1,25 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCompanySettings, getIntegrationSettings, parseBankAccounts, prisma } from "@/lib/prisma";
-import { getActiveWorkspaceId } from "@/lib/workspace";
+import { getActiveWorkspaceId, getCurrentSession, requireOwnerOrAdmin } from "@/lib/workspace";
+import { isMaskedOrEmpty, maskSecret } from "@/lib/security";
+
+function sanitizeIntegrations<T extends Record<string, unknown>>(integ: T) {
+  return {
+    ...integ,
+    smtpPass: maskSecret(String(integ.smtpPass || "")),
+    imapPass: maskSecret(String(integ.imapPass || "")),
+    metaAccessToken: maskSecret(String(integ.metaAccessToken || "")),
+    metaPageAccessToken: maskSecret(String(integ.metaPageAccessToken || "")),
+    metaAppSecret: maskSecret(String(integ.metaAppSecret || "")),
+    aiApiKey: maskSecret(String(integ.aiApiKey || "")),
+  };
+}
 
 export async function GET() {
+  const session = await getCurrentSession();
   const workspaceId = await getActiveWorkspaceId();
+  if (workspaceId.startsWith("__")) {
+    return NextResponse.json({ error: "Sin acceso activo a esta empresa." }, { status: 403 });
+  }
+
   const [company, integrations] = await Promise.all([
     getCompanySettings(workspaceId),
     getIntegrationSettings(workspaceId),
   ]);
+
   return NextResponse.json({
+    canEdit: Boolean(
+      process.env.CRM_DISABLE_AUTH === "true" ||
+        (session && (session.role === "SUPERADMIN" || session.role === "OWNER"))
+    ),
     company: {
       ...company,
       bankAccounts: parseBankAccounts(company.bankAccountsJson),
     },
-    integrations,
+    integrations: sanitizeIntegrations(integrations as unknown as Record<string, unknown>),
   });
 }
 
 export async function PATCH(req: NextRequest) {
   try {
-    const workspaceId = await getActiveWorkspaceId();
+    const guard = await requireOwnerOrAdmin();
+    if (!guard.ok) {
+      return NextResponse.json({ error: guard.error }, { status: guard.status });
+    }
+    const workspaceId = guard.workspaceId;
     const body = await req.json();
 
     if (body.company) {
@@ -64,27 +91,29 @@ export async function PATCH(req: NextRequest) {
           ...(i.smtpPort !== undefined ? { smtpPort: Number(i.smtpPort) || 465 } : {}),
           ...(i.smtpSecure !== undefined ? { smtpSecure: Boolean(i.smtpSecure) } : {}),
           ...(i.smtpUser !== undefined ? { smtpUser: String(i.smtpUser) } : {}),
-          ...(i.smtpPass !== undefined ? { smtpPass: String(i.smtpPass) } : {}),
+          ...(!isMaskedOrEmpty(i.smtpPass) ? { smtpPass: String(i.smtpPass).trim() } : {}),
           ...(i.smtpFromName !== undefined ? { smtpFromName: String(i.smtpFromName) } : {}),
           ...(i.smtpFromEmail !== undefined ? { smtpFromEmail: String(i.smtpFromEmail) } : {}),
           ...(i.imapHost !== undefined ? { imapHost: String(i.imapHost) } : {}),
           ...(i.imapPort !== undefined ? { imapPort: Number(i.imapPort) || 993 } : {}),
           ...(i.imapSecure !== undefined ? { imapSecure: Boolean(i.imapSecure) } : {}),
           ...(i.imapUser !== undefined ? { imapUser: String(i.imapUser) } : {}),
-          ...(i.imapPass !== undefined ? { imapPass: String(i.imapPass) } : {}),
-          ...(i.metaAccessToken !== undefined ? { metaAccessToken: String(i.metaAccessToken) } : {}),
-          ...(i.metaPageAccessToken !== undefined ? { metaPageAccessToken: String(i.metaPageAccessToken) } : {}),
+          ...(!isMaskedOrEmpty(i.imapPass) ? { imapPass: String(i.imapPass).trim() } : {}),
+          ...(!isMaskedOrEmpty(i.metaAccessToken) ? { metaAccessToken: String(i.metaAccessToken).trim() } : {}),
+          ...(!isMaskedOrEmpty(i.metaPageAccessToken)
+            ? { metaPageAccessToken: String(i.metaPageAccessToken).trim() }
+            : {}),
           ...(i.metaPhoneNumberId !== undefined ? { metaPhoneNumberId: String(i.metaPhoneNumberId) } : {}),
           ...(i.metaWabaId !== undefined ? { metaWabaId: String(i.metaWabaId) } : {}),
           ...(i.metaPageId !== undefined ? { metaPageId: String(i.metaPageId) } : {}),
           ...(i.metaIgAccountId !== undefined ? { metaIgAccountId: String(i.metaIgAccountId) } : {}),
           ...(i.metaAdAccountId !== undefined ? { metaAdAccountId: String(i.metaAdAccountId) } : {}),
           ...(i.metaVerifyToken !== undefined ? { metaVerifyToken: String(i.metaVerifyToken) } : {}),
-          ...(i.metaAppSecret !== undefined ? { metaAppSecret: String(i.metaAppSecret) } : {}),
+          ...(!isMaskedOrEmpty(i.metaAppSecret) ? { metaAppSecret: String(i.metaAppSecret).trim() } : {}),
           ...(i.metaPublicWebhookUrl !== undefined ? { metaPublicWebhookUrl: String(i.metaPublicWebhookUrl) } : {}),
           ...(i.metaAutoReply !== undefined ? { metaAutoReply: Boolean(i.metaAutoReply) } : {}),
           ...(i.aiProvider !== undefined ? { aiProvider: String(i.aiProvider) } : {}),
-          ...(i.aiApiKey !== undefined ? { aiApiKey: String(i.aiApiKey) } : {}),
+          ...(!isMaskedOrEmpty(i.aiApiKey) ? { aiApiKey: String(i.aiApiKey).trim() } : {}),
           ...(i.aiModel !== undefined ? { aiModel: String(i.aiModel) } : {}),
           ...(i.aiAutoReplyWhatsapp !== undefined ? { aiAutoReplyWhatsapp: Boolean(i.aiAutoReplyWhatsapp) } : {}),
           ...(i.aiAutoReplyEmail !== undefined ? { aiAutoReplyEmail: Boolean(i.aiAutoReplyEmail) } : {}),
@@ -105,7 +134,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       company: { ...company, bankAccounts: parseBankAccounts(company.bankAccountsJson) },
-      integrations,
+      integrations: sanitizeIntegrations(integrations as unknown as Record<string, unknown>),
     });
   } catch (err) {
     console.error("Save settings error:", err);

@@ -3,9 +3,19 @@ import { createSessionToken, getAuthConfig, SESSION_COOKIE } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { WORKSPACE_COOKIE } from "@/lib/workspace";
+import { checkRateLimit, getClientIp } from "@/lib/security";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(`register:${ip}`, 5, 60 * 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Límite de registros alcanzado temporalmente. Intenta más tarde." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const name = String(body.name || "").trim();
     const email = String(body.email || "").trim().toLowerCase();
@@ -24,9 +34,9 @@ export async function POST(req: NextRequest) {
     if (!email || !email.includes("@")) {
       return NextResponse.json({ error: "Ingresa un correo electrónico válido." }, { status: 400 });
     }
-    if (password.length < 6) {
+    if (password.length < 8) {
       return NextResponse.json(
-        { error: "La contraseña debe tener al menos 6 caracteres." },
+        { error: "La contraseña debe tener al menos 8 caracteres." },
         { status: 400 }
       );
     }

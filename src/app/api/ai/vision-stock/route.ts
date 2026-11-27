@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { identifyShoeAndFetchLiveStock } from "@/lib/vision-stock";
+import { isSafeExternalHttpsUrl } from "@/lib/security";
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,7 +24,14 @@ export async function POST(req: NextRequest) {
       hintText = String(body.hint || body.query || "").trim();
       candidateUrl = String(body.candidateUrl || "").trim();
       if (body.imageUrl) {
-        const imgRes = await fetch(String(body.imageUrl));
+        const rawUrl = String(body.imageUrl).trim();
+        if (!isSafeExternalHttpsUrl(rawUrl)) {
+          return NextResponse.json(
+            { error: "URL de imagen inválida. Solo se permiten enlaces públicos HTTPS." },
+            { status: 400 }
+          );
+        }
+        const imgRes = await fetch(rawUrl);
         if (imgRes.ok) {
           imageBytes = Buffer.from(await imgRes.arrayBuffer());
           mimeType = imgRes.headers.get("content-type") || "image/jpeg";

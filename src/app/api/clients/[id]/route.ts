@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCRPhone } from "@/lib/format";
 import { runTriggerAutomations } from "@/lib/automations";
+import { getActiveWorkspaceId } from "@/lib/workspace";
 
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const workspaceId = await getActiveWorkspaceId();
   const { id } = await context.params;
-  const client = await prisma.client.findUnique({
-    where: { id },
+  const client = await prisma.client.findFirst({
+    where: { id, workspaceId },
     include: {
       quotes: { orderBy: { number: "desc" }, include: { items: true } },
       conversations: {
@@ -25,9 +27,10 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const workspaceId = await getActiveWorkspaceId();
     const { id } = await context.params;
     const body = await req.json();
-    const existing = await prisma.client.findUnique({ where: { id } });
+    const existing = await prisma.client.findFirst({ where: { id, workspaceId } });
     if (!existing) {
       return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
     }
@@ -64,11 +67,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (data.contactType && data.contactType !== "CLIENTE") {
       await Promise.all([
         prisma.conversation.updateMany({
-          where: { clientId: id },
+          where: { clientId: id, workspaceId },
           data: { aiEnabled: false },
         }),
         prisma.sellerAlert.updateMany({
-          where: { clientId: id, resolved: false },
+          where: { clientId: id, workspaceId, resolved: false },
           data: { resolved: true, read: true },
         }),
       ]);
@@ -77,13 +80,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.stage && body.stage !== existing.stage) {
       await prisma.activity.create({
         data: {
+          workspaceId,
           clientId: id,
           type: "NOTA",
           title: `Cambio de etapa: ${existing.stage} → ${body.stage}`,
           completed: true,
         },
       });
-      await runTriggerAutomations("STAGE_CHANGED", { clientId: id });
+      await runTriggerAutomations("STAGE_CHANGED", { clientId: id, workspaceId });
     }
 
     return NextResponse.json({ client });
@@ -94,7 +98,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const workspaceId = await getActiveWorkspaceId();
   const { id } = await context.params;
-  await prisma.client.delete({ where: { id } });
+  const deleted = await prisma.client.deleteMany({ where: { id, workspaceId } });
+  if (deleted.count === 0) {
+    return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }

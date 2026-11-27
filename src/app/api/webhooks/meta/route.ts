@@ -28,9 +28,6 @@ export async function GET(req: NextRequest) {
   const challenge = searchParams.get("hub.challenge");
 
   if (mode === "subscribe" && token && challenge) {
-    if (token === "caminante_meta_verify_2026") {
-      return new NextResponse(challenge, { status: 200 });
-    }
     const matched = await prisma.integrationSettings.findFirst({
       where: { metaVerifyToken: token },
       select: { id: true },

@@ -25,7 +25,9 @@ async function resolveMailAccount(opts: {
   email?: string;
 }) {
   if (opts.accountId) {
-    const found = await prisma.emailAccount.findUnique({ where: { id: opts.accountId } });
+    const found = await prisma.emailAccount.findFirst({
+      where: { id: opts.accountId, workspaceId: opts.workspaceId },
+    });
     if (found) return found;
   }
   if (opts.email) {

@@ -101,6 +101,18 @@ export async function restoreBackupPayload(
     return String(rowWs || activeWorkspaceId) === activeWorkspaceId;
   };
 
+  // Prevent non-SuperAdmin OWNER from overwriting an existing record belonging to another company
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const canSafelyUpsert = async (model: any, id: unknown): Promise<boolean> => {
+    if (isSuperAdmin) return true;
+    if (!id) return true;
+    const existing = await model.findUnique({
+      where: { id: String(id) },
+      select: { workspaceId: true },
+    });
+    return !existing || existing.workspaceId === activeWorkspaceId;
+  };
+
   // Users: only SuperAdmin can restore user accounts
   if (isSuperAdmin && Array.isArray(data.users)) {
     for (const u of data.users) {
@@ -149,6 +161,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const a of data.emailAccounts) {
       if (!allowedWs(a.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.emailAccount, a.id))) continue;
       const { updatedAt: _u, createdAt: _c, ...rest } = a;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.emailAccount.upsert({
@@ -165,6 +178,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const p of data.products) {
       if (!allowedWs(p.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.product, p.id))) continue;
       const { updatedAt: _u, createdAt: _c, ...rest } = p;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.product.upsert({
@@ -181,6 +195,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const cl of data.clients) {
       if (!allowedWs(cl.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.client, cl.id))) continue;
       const { updatedAt: _u, createdAt: _c, ...rest } = cl;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.client.upsert({
@@ -197,6 +212,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const q of data.quotes) {
       if (!allowedWs(q.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.quote, q.id))) continue;
       const { items, updatedAt: _u, createdAt: _c, ...rest } = q;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.quote.upsert({
@@ -207,7 +223,7 @@ export async function restoreBackupPayload(
       if (Array.isArray(items)) {
         await prisma.quoteItem.deleteMany({ where: { quoteId: safeRest.id } });
         for (const it of items) {
-          await prisma.quoteItem.create({ data: it });
+          await prisma.quoteItem.create({ data: { ...it, quoteId: safeRest.id } });
         }
       }
       n++;
@@ -219,6 +235,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const conv of data.conversations) {
       if (!allowedWs(conv.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.conversation, conv.id))) continue;
       const { messages, updatedAt: _u, createdAt: _c, ...rest } = conv;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.conversation.upsert({
@@ -230,8 +247,8 @@ export async function restoreBackupPayload(
         for (const m of messages) {
           await prisma.message.upsert({
             where: { id: m.id },
-            update: m,
-            create: m,
+            update: { ...m, conversationId: safeRest.id },
+            create: { ...m, conversationId: safeRest.id },
           });
         }
       }
@@ -244,6 +261,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const d of data.documents) {
       if (!allowedWs(d.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.knowledgeDocument, d.id))) continue;
       const { updatedAt: _u, createdAt: _c, ...rest } = d;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.knowledgeDocument.upsert({
@@ -260,6 +278,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const r of data.rules) {
       if (!allowedWs(r.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.automationRule, r.id))) continue;
       const { updatedAt: _u, createdAt: _c, ...rest } = r;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.automationRule.upsert({
@@ -276,6 +295,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const act of data.activities) {
       if (!allowedWs(act.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.activity, act.id))) continue;
       const safeRest = isSuperAdmin ? act : { ...act, workspaceId: activeWorkspaceId };
       await prisma.activity.upsert({
         where: { id: safeRest.id },
@@ -291,6 +311,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const al of data.alerts) {
       if (!allowedWs(al.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.sellerAlert, al.id))) continue;
       const safeRest = isSuperAdmin ? al : { ...al, workspaceId: activeWorkspaceId };
       await prisma.sellerAlert.upsert({
         where: { id: safeRest.id },
@@ -306,6 +327,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const camp of data.campaigns) {
       if (!allowedWs(camp.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.campaign, camp.id))) continue;
       const { updatedAt: _u, createdAt: _c, ...rest } = camp;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.campaign.upsert({
@@ -322,6 +344,7 @@ export async function restoreBackupPayload(
     let n = 0;
     for (const seq of data.sequences) {
       if (!allowedWs(seq.workspaceId)) continue;
+      if (!(await canSafelyUpsert(prisma.followUpSequence, seq.id))) continue;
       const { steps, enrollments, updatedAt: _u, createdAt: _c, ...rest } = seq;
       const safeRest = isSuperAdmin ? rest : { ...rest, workspaceId: activeWorkspaceId };
       await prisma.followUpSequence.upsert({
@@ -334,15 +357,18 @@ export async function restoreBackupPayload(
           const { createdAt: _sc, ...stRest } = st;
           await prisma.sequenceStep.upsert({
             where: { id: stRest.id },
-            update: stRest,
-            create: stRest,
+            update: { ...stRest, sequenceId: safeRest.id },
+            create: { ...stRest, sequenceId: safeRest.id },
           });
         }
       }
       if (Array.isArray(enrollments)) {
         for (const en of enrollments) {
+          if (!(await canSafelyUpsert(prisma.sequenceEnrollment, en.id))) continue;
           const { createdAt: _ec, updatedAt: _eu, ...enRest } = en;
-          const safeEn = isSuperAdmin ? enRest : { ...enRest, workspaceId: activeWorkspaceId };
+          const safeEn = isSuperAdmin
+            ? { ...enRest, sequenceId: safeRest.id }
+            : { ...enRest, sequenceId: safeRest.id, workspaceId: activeWorkspaceId };
           await prisma.sequenceEnrollment.upsert({
             where: { id: safeEn.id },
             update: safeEn,
