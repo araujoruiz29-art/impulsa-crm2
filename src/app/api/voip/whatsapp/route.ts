@@ -4,6 +4,7 @@ import { getActiveWorkspaceId, getCurrentSession, requireOwnerOrAdmin } from "@/
 import {
   configureWhatsAppCallingSettings,
   controlWhatsAppCall,
+  getWhatsAppCallingSettings,
   sendWhatsAppCallPermissionRequest,
 } from "@/lib/meta";
 import { normalizeCRPhone } from "@/lib/format";
@@ -37,12 +38,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, activeCalls });
   }
 
-  const calls = await prisma.whatsAppCall.findMany({
-    where: { workspaceId },
-    orderBy: { createdAt: "desc" },
-    take: 40,
+  const [calls, callingMeta] = await Promise.all([
+    prisma.whatsAppCall.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+    }),
+    getWhatsAppCallingSettings(workspaceId),
+  ]);
+  return NextResponse.json({
+    ok: true,
+    calls,
+    callingStatus: callingMeta.status,
+    callingDetail: callingMeta.detail || "",
   });
-  return NextResponse.json({ ok: true, calls });
 }
 
 // POST /api/voip/whatsapp — Manage WhatsApp Business Calling API actions + Gemini audio summary

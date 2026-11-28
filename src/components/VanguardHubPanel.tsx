@@ -90,7 +90,10 @@ export function VanguardHubPanel({
   const [sla, setSla] = useState<SlaData | null>(null);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [waCalls, setWaCalls] = useState<CallHistoryRow[]>([]);
+  const [waCallingStatus, setWaCallingStatus] = useState<"ENABLED" | "DISABLED" | "UNKNOWN">("UNKNOWN");
+  const [voipNotice, setVoipNotice] = useState("");
   const [radarItems, setRadarItems] = useState<RadarRow[]>([]);
+  const [radarNotice, setRadarNotice] = useState("");
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [busyAction, setBusyAction] = useState("");
 
@@ -116,6 +119,7 @@ export function VanguardHubPanel({
       if (voipRes.ok) {
         const v = await voipRes.json();
         setWaCalls(v.calls || []);
+        if (v.callingStatus) setWaCallingStatus(v.callingStatus);
       }
       if (radarRes.ok) {
         const r = await radarRes.json();
@@ -128,6 +132,7 @@ export function VanguardHubPanel({
 
   const toggleWhatsAppCalling = async (enable: boolean) => {
     setBusyAction(enable ? "voip_on" : "voip_off");
+    setVoipNotice("");
     try {
       const res = await fetch("/api/voip/whatsapp", {
         method: "POST",
@@ -135,7 +140,10 @@ export function VanguardHubPanel({
         body: JSON.stringify({ action: enable ? "enable_calling" : "disable_calling" }),
       });
       const d = await res.json();
-      onStatus(d.ok ? d.info || "✅ Estado VoIP actualizado." : `❌ ${d.error || "Error configurando VoIP."}`);
+      const msg = d.ok ? d.info || "✅ Estado VoIP actualizado." : `❌ ${d.error || "Error configurando VoIP."}`;
+      setVoipNotice(msg);
+      onStatus(msg);
+      if (d.ok) setWaCallingStatus(enable ? "ENABLED" : "DISABLED");
     } finally {
       setBusyAction("");
     }
@@ -143,10 +151,13 @@ export function VanguardHubPanel({
 
   const scanRadarNow = async () => {
     setBusyAction("radar_scan");
+    setRadarNotice("");
     try {
       const res = await fetch("/api/radar", { method: "POST" });
       const d = await res.json();
-      onStatus(d.ok ? d.message || "🛰️ Radar actualizado." : `❌ ${d.error || "Error escaneando la web."}`);
+      const msg = d.ok ? d.message || "🛰️ Radar actualizado." : `❌ ${d.error || "Error escaneando la web."}`;
+      setRadarNotice(msg);
+      onStatus(msg);
       if (d.ok) loadAudit();
     } finally {
       setBusyAction("");
@@ -564,9 +575,26 @@ export function VanguardHubPanel({
       <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <span className="font-extrabold text-emerald-950 flex items-center gap-1.5 text-sm">
-              <PhoneCall className="w-4 h-4 text-emerald-600" /> VoIP Oficial WhatsApp (WebRTC · Llamadas Entrantes $0/min)
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-extrabold text-emerald-950 flex items-center gap-1.5 text-sm">
+                <PhoneCall className="w-4 h-4 text-emerald-600" /> VoIP Oficial WhatsApp (WebRTC · Llamadas Entrantes $0/min)
+              </span>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  waCallingStatus === "ENABLED"
+                    ? "bg-emerald-600 text-white"
+                    : waCallingStatus === "DISABLED"
+                    ? "bg-slate-200 text-slate-700"
+                    : "bg-amber-100 text-amber-900"
+                }`}
+              >
+                {waCallingStatus === "ENABLED"
+                  ? "● ACTIVO EN META"
+                  : waCallingStatus === "DISABLED"
+                  ? "○ INACTIVO EN META"
+                  : "● SIN VERIFICAR"}
+              </span>
+            </div>
             <p className="text-slate-600 mt-0.5">
               Recibe y realiza llamadas de voz por WhatsApp directo en el navegador, con grabación y resumen IA automático. En Meta Developers → WhatsApp → Webhooks recuerda suscribir el campo <code>calls</code>.
             </p>
@@ -590,6 +618,18 @@ export function VanguardHubPanel({
             </button>
           </div>
         </div>
+
+        {voipNotice && (
+          <div
+            className={`p-3 rounded-xl text-xs font-bold border ${
+              voipNotice.startsWith("❌")
+                ? "bg-rose-50 border-rose-200 text-rose-800"
+                : "bg-emerald-100/80 border-emerald-300 text-emerald-950"
+            }`}
+          >
+            {voipNotice}
+          </div>
+        )}
 
         <div className="bg-white rounded-xl border border-emerald-200 overflow-hidden">
           <div className="px-3 py-2 bg-emerald-100/60 border-b border-emerald-200 font-bold text-emerald-950">
@@ -638,6 +678,18 @@ export function VanguardHubPanel({
             {busyAction === "radar_scan" ? "Escaneando la red..." : "🛰️ Escanear Internet Ahora"}
           </button>
         </div>
+
+        {radarNotice && (
+          <div
+            className={`p-3 rounded-xl text-xs font-bold border ${
+              radarNotice.startsWith("❌")
+                ? "bg-rose-50 border-rose-200 text-rose-800"
+                : "bg-violet-100 border-violet-300 text-violet-950"
+            }`}
+          >
+            {radarNotice}
+          </div>
+        )}
 
         <div className="space-y-2 max-h-72 overflow-y-auto">
           {radarItems.map((it) => (

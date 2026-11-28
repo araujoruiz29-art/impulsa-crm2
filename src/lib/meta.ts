@@ -497,6 +497,34 @@ export async function sendWhatsAppAudioNote(opts: {
 }
 
 // VoIP Oficial WhatsApp Business Calling API (WebRTC):
+// 0. Query live calling status from Meta Graph API
+export async function getWhatsAppCallingSettings(workspaceId?: string): Promise<{
+  status: "ENABLED" | "DISABLED" | "UNKNOWN";
+  detail?: string;
+}> {
+  const cfg = await getIntegrationSettings(workspaceId);
+  if (!cfg.metaAccessToken || !cfg.metaPhoneNumberId) {
+    return { status: "UNKNOWN", detail: "Meta Cloud API no configurado." };
+  }
+  try {
+    const endpoint = `https://graph.facebook.com/v21.0/${encodeURIComponent(cfg.metaPhoneNumberId)}/settings`;
+    const res = await fetch(endpoint, {
+      headers: { Authorization: `Bearer ${cfg.metaAccessToken}` },
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { status: "UNKNOWN", detail: data?.error?.message || `HTTP ${res.status}` };
+    }
+    const raw = String(data?.calling?.status || "").toUpperCase();
+    if (raw === "ENABLED") return { status: "ENABLED" };
+    if (raw === "DISABLED") return { status: "DISABLED" };
+    return { status: "UNKNOWN" };
+  } catch {
+    return { status: "UNKNOWN" };
+  }
+}
+
 // 1. Enable/disable the official Call icon & callback permissions on the business WhatsApp number
 export async function configureWhatsAppCallingSettings(opts: {
   workspaceId?: string;
